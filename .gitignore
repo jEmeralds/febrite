@@ -1,0 +1,40 @@
+﻿# Dependencies
+node_modules/
+server/node_modules/
+
+# Build output
+dist/
+dev-dist/
+server/dist/
+
+# Environment variables — NEVER commit these
+.env
+.env.local
+.env.*.local
+server/.env
+server/.env.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Vite cache
+.vite/
+
+# PWA generated files (they're rebuilt each time)
+public/sw.js
+public/workbox-*.js
+public/registerSW.js
