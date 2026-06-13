@@ -45,86 +45,149 @@ const Section = ({ children, style, id }) => (
 );
 
 /* ─────────────────────────────────────────────────────────────────
-   PHONE MOCKUP — cycles through three actual-feeling app screens
-   so visitors see what they'd get before signing up.
+   PHONE MOCKUP — five life-stage scenes so the landing tells the
+   real breadth of FeBrite: teen / young / mid / meno / elder.
+   Each scene shows one real moment from one real surface, with
+   copy and accent shifting per scene.
    ───────────────────────────────────────────────────────────────── */
-const DEMO = {
-  name: "Amani",
-  stage: "Young Women",
-  phase: "Luteal",
+
+const mockEyebrow = (color) => ({
+  fontSize: 11, color, textTransform: "uppercase",
+  letterSpacing: ".08em", fontWeight: 700,
+});
+const mockHeading = {
+  fontFamily: "Fraunces, serif", fontSize: 21, color: C.ink,
+  margin: "8px 0 12px", lineHeight: 1.18, letterSpacing: "-.01em",
+};
+const mockSoftCard = (tint) => ({
+  background: tint, borderRadius: 14, padding: 13, marginBottom: 11,
+});
+const mockMini = {
+  background: "#fff", borderRadius: 11, padding: "10px",
+  display: "flex", flexDirection: "column", alignItems: "flex-start",
+  gap: 4,
 };
 
-const MockHome = () => (
+/* 1. TEEN — Track. First-cycle moment, gentle and informative. */
+const MockTeen = () => (
   <div style={mockScreen}>
-    <div style={{ fontSize: 11, color: "#A95A4C", textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 700 }}>
-      Today · luteal phase
-    </div>
-    <div style={{ fontFamily: "Fraunces, serif", fontSize: 22, color: C.ink, margin: "6px 0 14px", lineHeight: 1.15 }}>
-      Hi {DEMO.name} — a quieter day might serve you well.
-    </div>
-    <div style={{ background: "#FBF1EC", borderRadius: 14, padding: 14, marginBottom: 11 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#A95A4C", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
-        <Sparkles size={13}/> What I noticed
-      </div>
-      <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>
-        Your sleep has been short three nights running, and your mood usually dips a day later. Tonight is one to protect.
+    <div style={mockEyebrow("#C97C8A")}>Track · 13–19</div>
+    <div style={mockHeading}>Day 1. First cycle ever.</div>
+    <div style={mockSoftCard("#FAEEF1")}>
+      <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+        Cramps and a heavy mood are common in these first days. FeBrite remembers what you log so the next one is less of a surprise.
       </div>
     </div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
-      <div style={miniCard}><Moon size={15} color="#A95A4C"/><span style={{ fontSize: 11, color: C.inkSoft, marginTop: 4 }}>Wind down</span></div>
-      <div style={miniCard}><Activity size={15} color="#A95A4C"/><span style={{ fontSize: 11, color: C.inkSoft, marginTop: 4 }}>Gentle yoga</span></div>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {["Cramps", "Heavy", "Tired"].map((s) => (
+        <span key={s} style={{
+          fontSize: 11.5, padding: "5px 11px", borderRadius: 99,
+          background: "#fff", border: "1px solid #E8D5DA", color: "#A95A6C", fontWeight: 600,
+        }}>{s}</span>
+      ))}
     </div>
   </div>
 );
 
-const MockCompanion = () => (
+/* 2. YOUNG — Companion. Luteal mood, real Q&A. */
+const MockYoung = () => (
   <div style={mockScreen}>
-    <div style={{ fontSize: 11, color: "#7E5FA4", textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 700 }}>
-      Companion
-    </div>
+    <div style={mockEyebrow("#7E5FA4")}>Companion · 20s–30s</div>
     <div style={{ display: "flex", justifyContent: "flex-end", margin: "12px 0" }}>
       <div style={{ background: "#7E5FA4", color: "#fff", padding: "9px 13px", borderRadius: 13, borderBottomRightRadius: 5, fontSize: 12.5, maxWidth: "78%" }}>
         Why does my mood drop before my period?
       </div>
     </div>
     <div style={{ background: C.card, padding: 12, borderRadius: 13, fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
-      Hi {DEMO.name} — what you're feeling is real. In your luteal phase, estrogen and progesterone drop, which can shift serotonin and energy. For you it usually starts about five days before your period.
+      Hi Amani — what you're feeling is real. In your luteal phase, estrogen and progesterone drop, which shifts serotonin and energy. For you it usually starts about five days before your period.
     </div>
   </div>
 );
 
-const MockTrack = () => (
+/* 3. MID — Home. The sandwich years. Holding too much. */
+const MockMid = () => (
   <div style={mockScreen}>
-    <div style={{ fontSize: 11, color: "#3F7B5A", textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 700 }}>
-      Daily check-in
+    <div style={mockEyebrow("#A95A4C")}>Today · 30s–40s</div>
+    <div style={mockHeading}>Hi Leila — gentle is enough.</div>
+    <div style={mockSoftCard("#FBF1EC")}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#A95A4C", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+        <Sparkles size={13}/> What I noticed
+      </div>
+      <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+        Sleep was short again, and you've been holding work and bedtime together. Today calls for less, not more.
+      </div>
     </div>
-    <div style={{ fontFamily: "Fraunces, serif", fontSize: 19, color: C.ink, margin: "6px 0 14px" }}>
-      How are you, really?
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+      <div style={mockMini}>
+        <Moon size={15} color="#A95A4C"/>
+        <span style={{ fontSize: 11, color: C.inkSoft }}>Ten quiet minutes</span>
+      </div>
+      <div style={mockMini}>
+        <Heart size={15} color="#A95A4C"/>
+        <span style={{ fontSize: 11, color: C.inkSoft }}>Tell someone</span>
+      </div>
     </div>
-    {[
-      { label: "Mood", value: 4, color: "#3F7B5A" },
-      { label: "Energy", value: 3, color: "#A95A4C" },
-      { label: "Sleep", value: 2, color: "#7E5FA4" },
-    ].map((row) => (
-      <div key={row.label} style={{ marginBottom: 11 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: C.inkSoft, marginBottom: 5 }}>
-          <span>{row.label}</span>
-          <span style={{ color: row.color, fontWeight: 700 }}>{row.value}/5</span>
+  </div>
+);
+
+/* 4. MENO — Track. Irregular cycles, real numbers. */
+const MockMeno = () => {
+  const cycles = [24, 30, 26, 35, 28, 22];
+  const avg = Math.round(cycles.reduce((s, n) => s + n, 0) / cycles.length);
+  return (
+    <div style={mockScreen}>
+      <div style={mockEyebrow("#C9893F")}>Track · perimenopause</div>
+      <div style={mockHeading}>Your cycles have shifted.</div>
+      <div style={mockSoftCard("#FBF3E6")}>
+        <div style={{ fontSize: 11.5, color: C.inkSoft, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>
+          Last six cycles · avg {avg} days
         </div>
-        <div style={{ display: "flex", gap: 5 }}>
-          {[1,2,3,4,5].map(n=>(
-            <div key={n} style={{ flex:1, height:7, borderRadius:99, background: n <= row.value ? row.color : "rgba(44,35,32,.1)" }}/>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 60 }}>
+          {cycles.map((n, i) => (
+            <div key={i} style={{
+              flex: 1, height: `${(n / 40) * 100}%`,
+              background: "#C9893F", borderRadius: "4px 4px 0 0",
+              position: "relative",
+            }}>
+              <div style={{
+                position: "absolute", top: -16, left: 0, right: 0, textAlign: "center",
+                fontSize: 10, color: C.inkSoft, fontWeight: 600,
+              }}>{n}</div>
+            </div>
           ))}
         </div>
       </div>
-    ))}
+      <div style={{ fontSize: 11.5, color: C.inkSoft, fontStyle: "italic", lineHeight: 1.5 }}>
+        Variation like this is part of this stage. We'll keep track for you.
+      </div>
+    </div>
+  );
+};
+
+/* 5. ELDER — Home. Post-cycle, what matters now. */
+const MockElder = () => (
+  <div style={mockScreen}>
+    <div style={mockEyebrow("#8B6E5A")}>Today · 55+</div>
+    <div style={mockHeading}>Sleep, bones, and the people who know you.</div>
+    <div style={mockSoftCard("#F2E9DD")}>
+      <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+        The three I'll keep watch on with you. Today: a walk if you can, and call someone who makes you laugh.
+      </div>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}>
+      <div style={mockMini}><Moon size={14} color="#8B6E5A"/><span style={{ fontSize: 10.5, color: C.inkSoft }}>Sleep</span></div>
+      <div style={mockMini}><Activity size={14} color="#8B6E5A"/><span style={{ fontSize: 10.5, color: C.inkSoft }}>Bones</span></div>
+      <div style={mockMini}><Heart size={14} color="#8B6E5A"/><span style={{ fontSize: 10.5, color: C.inkSoft }}>Connect</span></div>
+    </div>
   </div>
 );
 
 const SCREENS = [
-  { Component: MockHome,      label: "A daily read of you",     glow: "#A95A4C" },
-  { Component: MockCompanion, label: "Answers, shaped by you", glow: "#7E5FA4" },
-  { Component: MockTrack,     label: "A tracker that listens",  glow: "#3F7B5A" },
+  { Component: MockTeen,      label: "For your first cycle",       glow: "#C97C8A" },
+  { Component: MockYoung,     label: "Answers, shaped by you",    glow: "#7E5FA4" },
+  { Component: MockMid,       label: "When you're carrying a lot", glow: "#A95A4C" },
+  { Component: MockMeno,      label: "Through perimenopause",      glow: "#C9893F" },
+  { Component: MockElder,     label: "For this season of life",    glow: "#8B6E5A" },
 ];
 
 const mockScreen = {
@@ -186,15 +249,32 @@ function PhoneMockup() {
           </AnimatePresence>
         </div>
       </motion.div>
-      {/* Caption dots */}
-      <div style={{ position: "absolute", bottom: -32, display: "flex", gap: 7, zIndex: 2 }}>
-        {SCREENS.map((s, i) => (
-          <button key={i} onClick={() => setIndex(i)} aria-label={s.label} style={{
-            width: i === index ? 22 : 7, height: 7, borderRadius: 99, border: "none", padding: 0,
-            background: i === index ? glow : "rgba(44,35,32,.2)",
-            cursor: "pointer", transition: "all .3s",
-          }}/>
-        ))}
+      {/* Caption: active scene label + progress dots */}
+      <div style={{
+        position: "absolute", bottom: -62, left: 0, right: 0,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 11, zIndex: 2,
+      }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.35 }}
+            style={{ fontSize: 13.5, color: C.inkSoft, fontFamily: "Karla, sans-serif", fontWeight: 500 }}
+          >
+            {SCREENS[index].label}
+          </motion.div>
+        </AnimatePresence>
+        <div style={{ display: "flex", gap: 7 }}>
+          {SCREENS.map((s, i) => (
+            <button key={i} onClick={() => setIndex(i)} aria-label={s.label} style={{
+              width: i === index ? 22 : 7, height: 7, borderRadius: 99, border: "none", padding: 0,
+              background: i === index ? glow : "rgba(44,35,32,.2)",
+              cursor: "pointer", transition: "all .3s",
+            }}/>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -337,10 +417,10 @@ function Preview() {
   return (
     <Section id="preview" style={{ paddingTop: 64, paddingBottom: 80, textAlign: "center" }}>
       <Reveal>
-        <span style={{ fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase", color: C.clay, fontWeight: 700 }}>See it in action</span>
-        <h2 style={{ ...h2, marginTop: 12 }}>Three surfaces, one companion</h2>
-        <p style={{ ...p, maxWidth: 540, margin: "8px auto 0" }}>
-          The Today screen reads your data. The Companion answers in your voice. The Tracker listens. Everything connects.
+        <span style={{ fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase", color: C.clay, fontWeight: 700 }}>See yourself in here</span>
+        <h2 style={{ ...h2, marginTop: 12 }}>From your first cycle to your wisest years.</h2>
+        <p style={{ ...p, maxWidth: 560, margin: "8px auto 0" }}>
+          One companion that meets you wherever you are — gentle through the first period, present through the heaviest years, steady into the seasons that come after.
         </p>
       </Reveal>
       <Reveal delay={0.15} style={{ marginTop: 56 }}>

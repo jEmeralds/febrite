@@ -26,6 +26,16 @@ export default function Library({ stage, accent, go }) {
     getRecentEntries(user.id, 14).then(setRecent).catch(()=>{});
   }, [user?.id]);
 
+  /* Clear conversation when the active topic changes.
+     Tapping a chip is a signal that the user has switched contexts —
+     leaving the previous answer visible under a new domain accent
+     reads as if that answer belongs to the new domain, which is
+     misleading. We clear and let suggestions re-scope. */
+  useEffect(() => {
+    setHistory([]);
+    setQuestion("");
+  }, [topic]);
+
   const suggestions = useMemo(() => suggestedQuestions(profile, recent, topic), [profile, recent, topic]);
   const domainLabel = topic && DOMAINS[topic]?.short;
 
