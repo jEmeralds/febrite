@@ -12,16 +12,20 @@ export function DailyNudge({ accent, onCheckIn }) {
   const [show, setShow] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
+  // Default to ON for any user who hasn't explicitly opted out.
+  const remindersOn = profile?.reminders_enabled !== false;
+
   useEffect(() => {
     if (!user?.id) return;
+    if (!remindersOn) { setShow(false); return; }
     let alive = true;
     hasCheckedInToday(user.id).then((done) => {
       if (alive) setShow(!done);
     });
     return () => { alive = false; };
-  }, [user?.id]);
+  }, [user?.id, remindersOn]);
 
-  if (!show || dismissed) return null;
+  if (!show || dismissed || !remindersOn) return null;
 
   const cyc = currentCyclePhase(profile);
   const phaseLine = cyc ? `Day ${cyc.dayInCycle} · ${cyc.phase} phase` : null;

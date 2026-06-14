@@ -18,6 +18,8 @@ import PractitionerProfile from "./features/practitioners/PractitionerProfile";
 import Legal from "./features/legal/Legal";
 import Shell from "./app/Shell";
 import { Analytics } from "@vercel/analytics/react";
+import { MotionConfig } from "framer-motion";
+import { useReduceMotionPref } from "./lib/usePreferences";
 
 function Splash() {
   return <div style={{ minHeight:"100vh", display:"grid", placeItems:"center", background:C.cream, color:C.inkSoft, fontFamily:"Karla, sans-serif" }}>Loading…</div>;
@@ -47,26 +49,29 @@ function RequireStage({ children }) {
 }
 
 export default function App() {
+  const [reduceMotion] = useReduceMotionPref();
   return (
     <AuthProvider>
       <ThemeProvider>
-        <Routes>
-          <Route path="/" element={<Landing/>}/>
-          <Route path="/signup" element={<Signup/>}/>
-          <Route path="/login" element={<Login/>}/>
-          <Route path="/check-email" element={<CheckEmail/>}/>
-          <Route path="/auth/callback" element={<AuthCallback/>}/>
-          <Route path="/legal/:doc" element={<Legal/>}/>
-          <Route path="/welcome" element={<Protected><Welcome/></Protected>}/>
-          <Route path="/profile" element={<Protected><Profile/></Protected>}/>
-          <Route path="/settings" element={<Protected><Settings/></Protected>}/>
-          <Route path="/join-as-pro" element={<JoinAsPro/>}/>
-          <Route path="/pro/setup" element={<Protected><ProSetup/></Protected>}/>
-          <Route path="/pro/status" element={<Protected><ProStatus/></Protected>}/>
-          <Route path="/practitioner/:id" element={<PractitionerProfile/>}/>
-          <Route path="/app" element={<Protected><RequireStage><Shell/></RequireStage></Protected>}/>
-          <Route path="*" element={<Navigate to="/" replace/>}/>
-        </Routes>
+        <MotionConfig reducedMotion={reduceMotion ? "always" : "user"}>
+          <Routes>
+            <Route path="/" element={<Landing/>}/>
+            <Route path="/signup" element={<Signup/>}/>
+            <Route path="/login" element={<Login/>}/>
+            <Route path="/check-email" element={<CheckEmail/>}/>
+            <Route path="/auth/callback" element={<AuthCallback/>}/>
+            <Route path="/legal/:doc" element={<Legal/>}/>
+            <Route path="/welcome" element={<Protected><Welcome/></Protected>}/>
+            <Route path="/profile" element={<Protected><Profile/></Protected>}/>
+            <Route path="/settings" element={<Protected><Settings/></Protected>}/>
+            <Route path="/join-as-pro" element={<JoinAsPro/>}/>
+            <Route path="/pro/setup" element={<Protected><ProSetup/></Protected>}/>
+            <Route path="/pro/status" element={<Protected><ProStatus/></Protected>}/>
+            <Route path="/practitioner/:id" element={<PractitionerProfile/>}/>
+            <Route path="/app" element={<Protected><RequireStage><Shell/></RequireStage></Protected>}/>
+            <Route path="*" element={<Navigate to="/" replace/>}/>
+          </Routes>
+        </MotionConfig>
         <Analytics/>
       </ThemeProvider>
     </AuthProvider>

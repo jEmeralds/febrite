@@ -66,6 +66,12 @@ export default function CheckEmail() {
           </div>
         </Card>
 
+        <Card>
+          <div style={{ fontSize:13.5, color:C.ink, lineHeight:1.55 }}>
+            <b>Link in the email not working?</b> Try <Link to="/login" style={{ color:C.clay, fontWeight:600 }}>logging in</Link> directly with the email and password you just set — your account may already be ready to use.
+          </div>
+        </Card>
+
         {status === "sent" && (
           <div style={{ fontSize:13.5, color:C.sage, background:"rgba(118,135,106,.12)", padding:"9px 12px", borderRadius:10, display:"flex", alignItems:"center", gap:7 }}>
             <Check size={15}/> Sent again. Check your inbox.

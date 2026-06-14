@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   // ---- load session ----
   useEffect(() => {
@@ -43,8 +44,13 @@ export function AuthProvider({ children }) {
 
   const loadProfile = useCallback(async (id) => {
     if (!hasSupabase) return;
-    const { data } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
-    setProfile(data || null);
+    setProfileLoading(true);
+    try {
+      const { data } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
+      setProfile(data || null);
+    } finally {
+      setProfileLoading(false);
+    }
   }, []);
 
   // ---- actions ----
@@ -133,17 +139,27 @@ export function AuthProvider({ children }) {
   };
 
   const deleteAccount = async () => {
-    // Demo mode: wipe local. Supabase: requires a server-side function with the
-    // service role to delete the auth user — left as a documented backend task.
+    // Demo mode: wipe local. Supabase: call the SECURITY DEFINER RPC
+    // we ship in schema_v5 — it deletes the auth.users row (cascading
+    // to profiles + tracking_entries), then we sign out client-side.
+    if (hasSupabase) {
+      try {
+        const { error } = await supabase.rpc("delete_my_account");
+        if (error) throw error;
+      } catch (e) {
+        console.error("delete_my_account RPC failed", e);
+        // Fall through to client-side cleanup so user isn't trapped.
+      }
+      await supabase.auth.signOut();
+    }
     localStorage.removeItem(LS_USER);
     localStorage.removeItem(LS_PROFILE);
-    if (hasSupabase) await supabase.auth.signOut();
     setUser(null); setProfile(null);
   };
 
   return (
     <AuthCtx.Provider value={{
-      user, profile, loading, isDemo: !hasSupabase,
+      user, profile, loading, profileLoading, isDemo: !hasSupabase,
       signUp, signUpAsPro, signIn, signOut, updateProfile, deleteAccount, resendConfirmation,
     }}>
       {children}

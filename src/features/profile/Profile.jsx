@@ -9,6 +9,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { STAGES } from "../../data/content";
 import { Card, SectionHead, C } from "../../components/ui";
 import { PageHeader } from "../../components/Logo";
+import DateOfBirthInput from "../../components/DateOfBirthInput";
 
 /* ============================================================
    The Bio / Profile page — built around progressive disclosure.
@@ -213,7 +214,10 @@ function AboutYou({ profile, save, accent, done }) {
       <div style={grid2}>
         <TextField label="Name" value={form.display_name} onChange={(v)=>set({display_name:v})}/>
         <TextField label="Pronouns" value={form.pronouns} onChange={(v)=>set({pronouns:v})} placeholder="e.g. she/her"/>
-        <TextField label="Date of birth" type="date" value={form.date_of_birth} onChange={(v)=>set({date_of_birth:v})}/>
+        <div>
+          <div style={{ fontSize:12.5, color:C.inkSoft, marginBottom:6, fontWeight:600 }}>Date of birth</div>
+          <DateOfBirthInput value={form.date_of_birth} onChange={(v)=>set({date_of_birth:v})}/>
+        </div>
         <TextField label="Phone" value={form.phone} onChange={(v)=>set({phone:v})} placeholder="Optional, for reminders"/>
         <TextField label="City" value={form.city} onChange={(v)=>set({city:v})}/>
         <TextField label="Country" value={form.country} onChange={(v)=>set({country:v})}/>
