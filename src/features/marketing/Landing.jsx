@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
@@ -182,13 +182,118 @@ const MockElder = () => (
   </div>
 );
 
-const SCREENS = [
+/* 6. TEEN, alt — Companion. The tired-this-week question. */
+const MockTeenAlt = () => (
+  <div style={mockScreen}>
+    <div style={mockEyebrow("#C97C8A")}>Companion · 13–19</div>
+    <div style={{ display: "flex", justifyContent: "flex-end", margin: "12px 0" }}>
+      <div style={{ background: "#C97C8A", color: "#fff", padding: "9px 13px", borderRadius: 13, borderBottomRightRadius: 5, fontSize: 12.5, maxWidth: "78%" }}>
+        Why am I so tired this week?
+      </div>
+    </div>
+    <div style={{ background: C.card, padding: 12, borderRadius: 13, fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+      Hi Zara — your body's about to start a new cycle in a few days. The tired feeling is hormones shifting, plus school plus everything else. It's real. Rest counts.
+    </div>
+  </div>
+);
+
+/* 7. YOUNG, alt — Track. Work stress + cycle correlation. */
+const MockYoungAlt = () => (
+  <div style={mockScreen}>
+    <div style={mockEyebrow("#A95A4C")}>Track · 20s–30s</div>
+    <div style={mockHeading}>Your patterns are showing.</div>
+    <div style={mockSoftCard("#FBF1EC")}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#A95A4C", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+        <Sparkles size={13}/> What I measured
+      </div>
+      <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+        Your work-stress score is about 1.2 points higher in your luteal phase. That's measurable, not in your head.
+      </div>
+    </div>
+    <div style={{ fontSize: 11, color: C.inkSoft, fontStyle: "italic" }}>
+      Based on the last 3 cycles you've logged.
+    </div>
+  </div>
+);
+
+/* 8. MID, alt — Companion. Asking for help. */
+const MockMidAlt = () => (
+  <div style={mockScreen}>
+    <div style={mockEyebrow("#A95A4C")}>Companion · 30s–40s</div>
+    <div style={{ display: "flex", justifyContent: "flex-end", margin: "12px 0" }}>
+      <div style={{ background: "#A95A4C", color: "#fff", padding: "9px 13px", borderRadius: 13, borderBottomRightRadius: 5, fontSize: 12.5, maxWidth: "82%" }}>
+        How do I tell my partner I need help?
+      </div>
+    </div>
+    <div style={{ background: C.card, padding: 12, borderRadius: 13, fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+      Start small and specific, Leila — not "I need help" but "this week, can you take bedtime on Tuesday and Thursday?" Concrete asks are easier to receive than big ones.
+    </div>
+  </div>
+);
+
+/* 9. MENO, alt — Today. Hot flashes are normal-but-real. */
+const MockMenoAlt = () => (
+  <div style={mockScreen}>
+    <div style={mockEyebrow("#C9893F")}>Today · perimenopause</div>
+    <div style={mockHeading}>Two hot flashes yesterday. That's part of it.</div>
+    <div style={mockSoftCard("#FBF3E6")}>
+      <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+        You've been logging more of them this month. Cool layers, less caffeine after lunch, and naming it to people around you — these are the things that actually help.
+      </div>
+    </div>
+    <div style={{ fontSize: 11, color: C.inkSoft, fontStyle: "italic" }}>
+      I'll keep watching the pattern with you.
+    </div>
+  </div>
+);
+
+/* 10. ELDER, alt — Companion. Grief moment, held carefully. */
+const MockElderAlt = () => (
+  <div style={mockScreen}>
+    <div style={mockEyebrow("#8B6E5A")}>Companion · 55+</div>
+    <div style={{ display: "flex", justifyContent: "flex-end", margin: "12px 0" }}>
+      <div style={{ background: "#8B6E5A", color: "#fff", padding: "9px 13px", borderRadius: 13, borderBottomRightRadius: 5, fontSize: 12.5, maxWidth: "82%" }}>
+        My husband passed. Some days I can't move.
+      </div>
+    </div>
+    <div style={{ background: C.card, padding: 12, borderRadius: 13, fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+      Grace — I'm so sorry. Those days are not a failing; they're the weight of what you carry. There's no schedule for this. When you can, even a small thing — a glass of water, a window opened — counts.
+    </div>
+  </div>
+);
+
+const ALL_SCREENS = [
   { Component: MockTeen,      label: "For your first cycle",       glow: "#C97C8A" },
   { Component: MockYoung,     label: "Answers, shaped by you",    glow: "#7E5FA4" },
   { Component: MockMid,       label: "When you're carrying a lot", glow: "#A95A4C" },
   { Component: MockMeno,      label: "Through perimenopause",      glow: "#C9893F" },
   { Component: MockElder,     label: "For this season of life",    glow: "#8B6E5A" },
+  { Component: MockTeenAlt,   label: "When school feels heavy",    glow: "#C97C8A" },
+  { Component: MockYoungAlt,  label: "Patterns you can measure",   glow: "#A95A4C" },
+  { Component: MockMidAlt,    label: "When you need help",         glow: "#A95A4C" },
+  { Component: MockMenoAlt,   label: "Through the changes",        glow: "#C9893F" },
+  { Component: MockElderAlt,  label: "Held through grief",         glow: "#8B6E5A" },
 ];
+
+/* Pick 5 scenes for today, deterministically. Same day → same 5
+   in same order (consistent within a single visit). Day rolls over
+   → different selection (variety for returning visitors). */
+function pickDailyScenes(pool, n = 5) {
+  const d = new Date();
+  let seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  const rand = () => {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const arr = [...pool];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, n);
+}
 
 const mockScreen = {
   padding: "20px 18px", background: C.cream, borderRadius: 22,
@@ -200,13 +305,14 @@ const miniCard = {
 };
 
 function PhoneMockup() {
+  const SCREENS = useMemo(() => pickDailyScenes(ALL_SCREENS, 5), []);
   const [index, setIndex] = useState(0);
   const reduceMotion = useReducedMotion();
   useEffect(() => {
     if (reduceMotion) return;
     const t = setInterval(() => setIndex((i) => (i + 1) % SCREENS.length), 4500);
     return () => clearInterval(t);
-  }, [reduceMotion]);
+  }, [reduceMotion, SCREENS.length]);
 
   const { Component, glow } = SCREENS[index];
 

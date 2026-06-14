@@ -8,7 +8,10 @@ const TODAY_CACHE_KEY = "febrite_daily_read";
    invalidated when she logs a new check-in (so the paragraph
    updates if she logs mid-day and comes back to Home). */
 export async function fetchDailyRead({ profile, userId, force = false }) {
-  const today = new Date().toISOString().slice(0, 10);
+  // Local-time date (not UTC) so the cache rolls over at the user's
+  // midnight, not GMT midnight.
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   let entries = [];
   if (userId) {
     try { entries = await getRecentEntries(userId, 14); } catch {}

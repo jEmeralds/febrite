@@ -12,6 +12,7 @@ import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
 import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/tracking";
 import { currentCyclePhase } from "../lib/cycleMath";
+import { useCurrentDate } from "../lib/useCurrentDate";
 
 /* ============================================================
    CONSTANTS
@@ -650,6 +651,12 @@ export default function Tracking({ stage, accent }) {
   const [entries, setEntries] = useState([]);
   const showsCycle = !["elder"].includes(stage);
 
+  /* Today's date as a live value. When midnight passes (or the user
+     returns to this tab after a date change), this string updates
+     and the effect below re-runs — clearing the form, re-fetching
+     entries, so the user is correctly on the NEW day. */
+  const todayDate = useCurrentDate();
+
   useEffect(() => {
     if (!user) return;
     let active = true;
@@ -658,8 +665,7 @@ export default function Tracking({ stage, accent }) {
         const data = await getRecentEntries(user.id, 28);
         if (!active) return;
         setEntries(data);
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const row = data.find((e) => e.entry_date === todayStr);
+        const row = data.find((e) => e.entry_date === todayDate);
         if (row) {
           setToday({
             mood: row.mood, sleep: row.sleep_hours ?? 7, water: row.water_glasses ?? 4,
@@ -668,11 +674,18 @@ export default function Tracking({ stage, accent }) {
             symptoms: row.symptoms || [],
           });
           setLogged(true);
+        } else {
+          // No entry yet for this date — start a clean check-in form.
+          setToday({
+            mood: null, sleep: 7, water: 4, moved: false, energy: null,
+            workStress: null, personalStress: null, phase: null, symptoms: [],
+          });
+          setLogged(false);
         }
       } catch (e) { console.error("load entries", e); }
     })();
     return () => { active = false; };
-  }, [user]);
+  }, [user, todayDate]);
 
   const chartData = useMemo(() => buildChartData(entries.slice(-14), 14), [entries]);
   const realDays = entries.filter((e) => e.mood != null).length;

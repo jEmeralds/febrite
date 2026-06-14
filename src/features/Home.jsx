@@ -9,6 +9,7 @@ import { fetchDailyRead } from "../lib/companion";
 import { getRecentEntries, hasCheckedInToday } from "../lib/tracking";
 import { recentObservations } from "../lib/observations";
 import { currentCyclePhase } from "../lib/cycleMath";
+import { useCurrentDate } from "../lib/useCurrentDate";
 
 const PHASE_COLOR = {
   Menstrual: "#C44A4A", Follicular: "#3F7B5A", Ovulation: "#D08C3B", Luteal: "#7E5FA4",
@@ -79,6 +80,7 @@ function DailyReadCard({ profile, accent }) {
   const { user } = useAuth();
   const [state, setState] = useState({ text: "", loading: true });
   const [feedback, setFeedback] = useState(null); // null | "up" | "down"
+  const todayDate = useCurrentDate(); // ticks at midnight
 
   useEffect(() => {
     let alive = true;
@@ -87,7 +89,7 @@ function DailyReadCard({ profile, accent }) {
       if (alive) setState({ text: res.text, loading: false });
     });
     return () => { alive = false; };
-  }, [user?.id, profile?.life_stage, profile?.cycle_start_date]);
+  }, [user?.id, profile?.life_stage, profile?.cycle_start_date, todayDate]);
 
   const regenerate = async () => {
     setState({ text: "", loading: true });

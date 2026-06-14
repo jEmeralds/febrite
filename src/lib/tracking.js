@@ -1,7 +1,16 @@
 import { supabase, hasSupabase } from "./supabase";
 
 const LS_KEY = "febrite_demo_tracking";
-const today = () => new Date().toISOString().slice(0, 10);
+/* Local-time date string, NOT UTC. UTC mis-dates check-ins logged
+   between midnight and a few hours into a new day for users east
+   of GMT (e.g. Nairobi user at 1am locally would save as yesterday). */
+const today = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
 /* Map the in-app form shape to the DB column names. */
 function toRow(userId, form) {

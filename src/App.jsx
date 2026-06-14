@@ -17,6 +17,7 @@ import ProStatus from "./features/practitioners/ProStatus";
 import PractitionerProfile from "./features/practitioners/PractitionerProfile";
 import Legal from "./features/legal/Legal";
 import Shell from "./app/Shell";
+import { Analytics } from "@vercel/analytics/react";
 
 function Splash() {
   return <div style={{ minHeight:"100vh", display:"grid", placeItems:"center", background:C.cream, color:C.inkSoft, fontFamily:"Karla, sans-serif" }}>Loading…</div>;
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/app" element={<Protected><RequireStage><Shell/></RequireStage></Protected>}/>
           <Route path="*" element={<Navigate to="/" replace/>}/>
         </Routes>
+        <Analytics/>
       </ThemeProvider>
     </AuthProvider>
   );
