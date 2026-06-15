@@ -1,56 +1,70 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { C } from "../theme/tokens";
 
 /* DateOfBirthInput
    ----------------------------------------------------------------
    Three side-by-side <select> dropdowns: month / day / year.
-   Replaces <input type="date"> for date-of-birth specifically,
-   because the native picker on Android forces year-by-year scrolling
-   which is painful for selecting a year 30-60 years back.
 
-   Value format: "YYYY-MM-DD" (matches the existing profile field
-   so we can drop this in without touching the data layer). */
+   IMPORTANT: this component keeps its own internal state for the
+   three fields. We only call onChange(YYYY-MM-DD) once all three
+   are set. If we instead read the values back from `value` on
+   every render, a partial selection (just a month, not yet a year)
+   would immediately be wiped when the empty value is round-tripped
+   through the parent. */
 export default function DateOfBirthInput({ value, onChange, disabled = false }) {
-  const [y0, m0, d0] = (value || "").split("-");
-  const year = y0 || "";
-  const month = m0 || "";
-  const day = d0 || "";
+  const init = (value || "").split("-");
+  const [year, setYear]   = useState(init[0] || "");
+  const [month, setMonth] = useState(init[1] || "");
+  const [day, setDay]     = useState(init[2] || "");
+
+  // Sync internal state when parent value changes (profile loads async,
+  // form gets reset, etc.).
+  useEffect(() => {
+    if (!value) { setYear(""); setMonth(""); setDay(""); return; }
+    const [y, m, d] = value.split("-");
+    setYear(y || ""); setMonth(m || ""); setDay(d || "");
+  }, [value]);
+
+  // Emit to parent only when all three are filled. (Emitting on
+  // partial state would cause the parent to immediately overwrite
+  // back to "" and erase the user's selection.)
+  useEffect(() => {
+    if (year && month && day) onChange(`${year}-${month}-${day}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, month, day]);
+
+  // Clamp day if month/year change makes it invalid (Feb 30 -> Feb 28).
+  useEffect(() => {
+    if (year && month && day) {
+      const max = new Date(Number(year), Number(month), 0).getDate();
+      if (Number(day) > max) setDay(String(max).padStart(2, "0"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, month]);
 
   const now = new Date();
   const years = useMemo(() => {
     const arr = [];
-    // 1925 through current year, newest first (most people are 0–100)
     for (let y = now.getFullYear(); y >= 1925; y--) arr.push(y);
     return arr;
-  }, [now]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const months = [
     { v: "01", n: "January" }, { v: "02", n: "February" }, { v: "03", n: "March" },
-    { v: "04", n: "April" }, { v: "05", n: "May" }, { v: "06", n: "June" },
-    { v: "07", n: "July" }, { v: "08", n: "August" }, { v: "09", n: "September" },
+    { v: "04", n: "April" },   { v: "05", n: "May" },      { v: "06", n: "June" },
+    { v: "07", n: "July" },    { v: "08", n: "August" },   { v: "09", n: "September" },
     { v: "10", n: "October" }, { v: "11", n: "November" }, { v: "12", n: "December" },
   ];
 
-  // Days adjust to selected month + year (Feb 28/29, etc.)
   const daysInMonth = useMemo(() => {
     if (!year || !month) return 31;
     return new Date(Number(year), Number(month), 0).getDate();
   }, [year, month]);
-  const days = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")), [daysInMonth]);
-
-  const update = (next) => {
-    // Always pad to ISO 2-digit, only emit a value when all three are set.
-    const y = next.year ?? year;
-    const m = next.month ?? month;
-    let d = next.day ?? day;
-    // Clamp day if month change made it invalid (e.g. Feb 30 → Feb 28)
-    if (y && m) {
-      const max = new Date(Number(y), Number(m), 0).getDate();
-      if (Number(d) > max) d = String(max).padStart(2, "0");
-    }
-    if (y && m && d) onChange(`${y}-${m}-${d}`);
-    else onChange("");
-  };
+  const days = useMemo(
+    () => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")),
+    [daysInMonth]
+  );
 
   const sel = {
     flex: 1, minWidth: 0, padding: "11px 10px", borderRadius: 11,
@@ -66,15 +80,15 @@ export default function DateOfBirthInput({ value, onChange, disabled = false }) 
 
   return (
     <div style={{ display: "flex", gap: 8 }}>
-      <select disabled={disabled} value={month} onChange={(e) => update({ month: e.target.value })} style={sel} aria-label="Month">
+      <select disabled={disabled} value={month} onChange={(e) => setMonth(e.target.value)} style={sel} aria-label="Month">
         <option value="">Month</option>
         {months.map((m) => <option key={m.v} value={m.v}>{m.n}</option>)}
       </select>
-      <select disabled={disabled} value={day} onChange={(e) => update({ day: e.target.value })} style={{ ...sel, maxWidth: 92 }} aria-label="Day">
+      <select disabled={disabled} value={day} onChange={(e) => setDay(e.target.value)} style={{ ...sel, maxWidth: 92 }} aria-label="Day">
         <option value="">Day</option>
         {days.map((d) => <option key={d} value={d}>{Number(d)}</option>)}
       </select>
-      <select disabled={disabled} value={year} onChange={(e) => update({ year: e.target.value })} style={{ ...sel, maxWidth: 110 }} aria-label="Year">
+      <select disabled={disabled} value={year} onChange={(e) => setYear(e.target.value)} style={{ ...sel, maxWidth: 110 }} aria-label="Year">
         <option value="">Year</option>
         {years.map((y) => <option key={y} value={y}>{y}</option>)}
       </select>

@@ -75,12 +75,31 @@ function MiniCycleWheel({ profile, size = 130 }) {
 
 /* ============================================================
    DAILY READ — the Gemini paragraph at the top of Home
+
+   The card's background tint comes from the user's current cycle
+   phase (rose / sage / amber / plum). This is the variety the user
+   was asking for — the card "feels alive" because its color
+   subtly shifts as her body moves through the month — without
+   the visual chaos of randomizing the whole card every load.
    ============================================================ */
+const PHASE_TINT = {
+  Menstrual:  "#C44A4A",
+  Follicular: "#3F7B5A",
+  Ovulation:  "#D08C3B",
+  Luteal:     "#7E5FA4",
+};
+
 function DailyReadCard({ profile, accent }) {
   const { user } = useAuth();
   const [state, setState] = useState({ text: "", loading: true });
   const [feedback, setFeedback] = useState(null); // null | "up" | "down"
   const todayDate = useCurrentDate(); // ticks at midnight
+
+  // The tint color = current phase color, or default accent if
+  // we don't know a phase (elder users, or anyone without
+  // cycle_start_date set).
+  const cyc = currentCyclePhase(profile);
+  const tint = cyc ? (PHASE_TINT[cyc.phase] || accent) : accent;
 
   useEffect(() => {
     let alive = true;
@@ -101,13 +120,16 @@ function DailyReadCard({ profile, accent }) {
   return (
     <Card style={{
       marginBottom: 22, padding: "28px 28px 22px",
-      background: `radial-gradient(110% 60% at 80% 0%, ${accent}14, ${C.card} 70%)`,
+      background: `radial-gradient(110% 60% at 80% 0%, ${tint}1F, ${C.card} 70%)`,
+      borderColor: `${tint}26`,
+      transition: "background .6s ease, border-color .6s ease",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
         <div style={{
           width: 28, height: 28, borderRadius: 8,
-          background: `${accent}1A`, color: accent,
+          background: `${tint}1F`, color: tint,
           display: "grid", placeItems: "center",
+          transition: "background .6s ease, color .6s ease",
         }}>
           <Sparkles size={15}/>
         </div>
@@ -245,12 +267,20 @@ function CycleAndObservations({ profile, entries, accent, go }) {
   const observations = useMemo(() => recentObservations(entries), [entries]);
   const phaseColor = cyc ? PHASE_COLOR[cyc.phase] || accent : accent;
 
+  // For elder users (post-menopause), the cycle snapshot is not
+  // relevant. Hide the cycle card and let the observations panel
+  // take the full row instead. The cycle math is a non-event for
+  // someone who finished menstruating years ago, and surfacing it
+  // is a small daily reminder of something they may have come to
+  // peace with. Observations + daily read are still meaningful.
+  const isElder = profile?.life_stage === "elder";
+
   return (
     <div style={{
       display: "grid", gap: 18,
-      gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.4fr)",
+      gridTemplateColumns: isElder ? "1fr" : "minmax(0, 1fr) minmax(0, 1.4fr)",
     }} className="fb-home-bottom">
-      {/* Cycle snapshot */}
+      {!isElder && (
       <Card style={{ display: "flex", alignItems: "center", gap: 20 }}>
         {cyc ? (
           <>
@@ -306,6 +336,7 @@ function CycleAndObservations({ profile, entries, accent, go }) {
           </div>
         )}
       </Card>
+      )}
 
       {/* Observations */}
       <Card>
