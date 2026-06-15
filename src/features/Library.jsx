@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { ArrowLeft, Send, Sparkles, RefreshCw, ShieldAlert, ChevronDown, User as UserIcon } from "lucide-react";
 import { Card, SectionHead, C } from "../components/ui";
+import VoicesSection from "../components/VoicesSection";
 import { useAuth } from "../lib/auth";
 import { useTheme } from "../theme/ThemeProvider";
 import { DOMAINS } from "../data/content";
@@ -124,6 +125,13 @@ export default function Library({ stage, accent, go }) {
             ))}
           </div>
         </Card>
+      )}
+
+      {/* Voices from the community — only when no active conversation,
+          so an answer view isn't cluttered by other women's stories.
+          Filters by the user's stage + currently-selected topic chip. */}
+      {history.length === 0 && (
+        <VoicesSection stage={profile?.life_stage} topic={topic} accent={accent}/>
       )}
 
       {/* Back to questions — visible whenever a conversation exists */}
