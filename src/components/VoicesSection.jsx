@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Quote, Plus, Heart, Send, Check, X, AlertCircle } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Quote, Plus, Heart, Send, Check, X, AlertCircle, ArrowRight } from "lucide-react";
 import { Card, C } from "./ui";
 import { useAuth } from "../lib/auth";
 import { fetchVoices, submitVoice } from "../lib/voices";
@@ -16,6 +17,18 @@ export default function VoicesSection({ stage, topic, accent }) {
   const [voices, setVoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false); // submission modal
+  const [, setSearchParams] = useSearchParams();
+
+  // Library snippet is a teaser, not a destination — 3 voices, then a
+  // "See all in Community →" link. The full feed lives at the Community tab.
+  const goToCommunity = () => {
+    const p = new URLSearchParams();
+    p.set("view", "community");
+    setSearchParams(p);
+    // Bring the user to the top of the new view rather than the
+    // mid-page position where the teaser was.
+    setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 30);
+  };
 
   useEffect(() => {
     if (!stage) { setVoices([]); setLoading(false); return; }
@@ -57,11 +70,25 @@ export default function VoicesSection({ stage, topic, accent }) {
           </div>
         </Card>
       ) : (
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))" }}>
-          {voices.slice(0, 4).map((v) => (
-            <VoiceCard key={v.id} voice={v} accent={accent}/>
-          ))}
-        </div>
+        <>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))" }}>
+            {voices.slice(0, 3).map((v) => (
+              <VoiceCard key={v.id} voice={v} accent={accent}/>
+            ))}
+          </div>
+          <button onClick={goToCommunity} style={{
+            marginTop: 12, padding: "11px 14px", borderRadius: 11,
+            border: `1px solid ${C.line}`, background: "#fff", color: C.ink,
+            cursor: "pointer", fontFamily: "Karla, sans-serif",
+            display: "inline-flex", alignItems: "center", gap: 8,
+            fontSize: 13.5, fontWeight: 600, transition: ".15s",
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.borderColor = accent}
+          onMouseLeave={(e) => e.currentTarget.style.borderColor = C.line}
+          >
+            See all voices in Community <ArrowRight size={14} style={{ color: accent }}/>
+          </button>
+        </>
       )}
 
       <div style={{ fontSize: 11.5, color: C.inkSoft, marginTop: 10, fontStyle: "italic" }}>
@@ -81,7 +108,7 @@ export default function VoicesSection({ stage, topic, accent }) {
 }
 
 /* ---------------- VoiceCard ---------------- */
-function VoiceCard({ voice, accent }) {
+export function VoiceCard({ voice, accent }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = voice.body.length > 220;
   const display = expanded || !isLong ? voice.body : voice.body.slice(0, 220).trim() + "…";
@@ -132,7 +159,7 @@ function VoicesSkeleton() {
 }
 
 /* ---------------- SubmissionModal ---------------- */
-function SubmissionModal({ onClose, stage, defaultTopic, user, profile, accent }) {
+export function SubmissionModal({ onClose, stage, defaultTopic, user, profile, accent }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [topic, setTopic] = useState(defaultTopic || "life");
