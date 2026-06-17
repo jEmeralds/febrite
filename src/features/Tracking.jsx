@@ -13,6 +13,7 @@ import { Card, SectionHead, C } from "../components/ui";
 import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/tracking";
 import { currentCyclePhase } from "../lib/cycleMath";
 import { useCurrentDate } from "../lib/useCurrentDate";
+import ReportsPanel from "./track/ReportsPanel";
 
 /* ============================================================
    CONSTANTS
@@ -66,7 +67,7 @@ function BigCycleWheel({ profile, accent, size = 320 }) {
   const cx = size / 2;
   const cy = size / 2;
   const r  = (size / 2) - 22;
-  const sw = 22; // stroke width — slightly thicker for presence
+  const sw = 22;
 
   const dayToDeg = (d) => ((d - 1) / cycleLen) * 360;
   const polar = (deg, radius) => {
@@ -94,9 +95,7 @@ function BigCycleWheel({ profile, accent, size = 320 }) {
           </feMerge>
         </filter>
       </defs>
-      {/* Background ring (track) */}
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(44,35,32,.05)" strokeWidth={sw}/>
-      {/* Phase arcs — inactive ones dimmed, active one full */}
       {phases.map((p) => {
         const startDeg = dayToDeg(p.start);
         const endDeg = p.end >= cycleLen ? 360 : dayToDeg(p.end + 1);
@@ -113,7 +112,6 @@ function BigCycleWheel({ profile, accent, size = 320 }) {
           />
         );
       })}
-      {/* Tick marks every 7 days for orientation */}
       {Array.from({ length: Math.ceil(cycleLen / 7) }).map((_, i) => {
         const day = (i + 1) * 7;
         if (day > cycleLen) return null;
@@ -125,11 +123,9 @@ function BigCycleWheel({ profile, accent, size = 320 }) {
             stroke="rgba(44,35,32,.25)" strokeWidth={1.5}/>
         );
       })}
-      {/* Today marker — outer halo ring, white circle, inner dot */}
       <circle cx={mx} cy={my} r={18} fill={`${phaseColor}33`}/>
       <circle cx={mx} cy={my} r={13} fill="#fff" stroke={phaseColor} strokeWidth={3.5}/>
       <circle cx={mx} cy={my} r={5} fill={phaseColor}/>
-      {/* Center stack */}
       <text x={cx} y={cy - 28} textAnchor="middle" fontFamily="Karla, sans-serif"
             fontSize={11} fontWeight={700} fill="rgba(44,35,32,.5)" letterSpacing=".18em">
         CYCLE DAY
@@ -176,14 +172,13 @@ function CycleWheelEmpty({ size = 320 }) {
 }
 
 /* ============================================================
-   HERO — wheel on the left, today's narrative + status on the right
+   HERO
    ============================================================ */
 function TrackHero({ profile, entries, accent, todayLogged }) {
   const cyc = currentCyclePhase(profile);
   const phaseColor = cyc ? PHASE_COLOR[cyc.phase] || accent : accent;
   const streak = useMemo(() => weeklyStreak(entries), [entries]);
 
-  // Headline copy that changes by phase
   const phraseFor = (phase) => {
     if (!phase) return "Your cycle, your read of you.";
     if (phase === "Menstrual")  return "Your period is here. Be gentle with yourself.";
@@ -356,8 +351,7 @@ function CycleCalendar({ profile, entries, accent }) {
 }
 
 /* ============================================================
-   TIERED CHECK-IN — 3 essentials always visible, "log more"
-   expands the rest (phase, symptoms, stress, water, movement).
+   TIERED CHECK-IN
    ============================================================ */
 function CheckInPanel({ today, set, toggleSymptom, save, saving, logged, accent, showsCycle }) {
   const [expanded, setExpanded] = useState(false);
@@ -378,7 +372,6 @@ function CheckInPanel({ today, set, toggleSymptom, save, saving, logged, accent,
         The three essentials below take 30 seconds. Add more when you want a deeper read.
       </p>
 
-      {/* THREE ESSENTIALS */}
       <Card style={{ padding: 22 }}>
         <Lbl>Mood</Lbl>
         <EmojiRow items={MOODS} value={today.mood} onPick={(v) => set("mood", v)} accent={accent}/>
@@ -397,7 +390,6 @@ function CheckInPanel({ today, set, toggleSymptom, save, saving, logged, accent,
           }
         />
 
-        {/* EXPAND TOGGLE */}
         <button onClick={() => setExpanded((e) => !e)} style={{
           marginTop: 18, padding: "10px 14px", borderRadius: 11,
           border: `1px dashed ${C.line}`, background: "transparent",
@@ -410,7 +402,6 @@ function CheckInPanel({ today, set, toggleSymptom, save, saving, logged, accent,
             : <><ChevronDown size={15}/> Log more — symptoms, stress, cycle, more</>}
         </button>
 
-        {/* EXPANDED FIELDS */}
         {expanded && (
           <div style={{ marginTop: 22, paddingTop: 22, borderTop: `1px solid ${C.line}` }}>
             {showsCycle && (
@@ -481,7 +472,7 @@ function CheckInPanel({ today, set, toggleSymptom, save, saving, logged, accent,
 }
 
 /* ============================================================
-   CHART tooltip — translates numbers back to words
+   CHART tooltip
    ============================================================ */
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -505,7 +496,7 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 /* ============================================================
-   PATTERN ANALYSIS — only shown when ≥8 entries
+   PATTERN ANALYSIS
    ============================================================ */
 function calculatePatterns(entries) {
   const real = entries.filter((e) => e.mood != null);
@@ -675,7 +666,6 @@ export default function Tracking({ stage, accent }) {
           });
           setLogged(true);
         } else {
-          // No entry yet for this date — start a clean check-in form.
           setToday({
             mood: null, sleep: 7, water: 4, moved: false, energy: null,
             workStress: null, personalStress: null, phase: null, symptoms: [],
@@ -790,12 +780,8 @@ export default function Tracking({ stage, accent }) {
         <PatternsCard entries={entries} accent={accent}/>
       </div>
 
-      <Card style={{ marginTop: 16, display: "flex", gap: 9, alignItems: "center", borderStyle: "dashed" }}>
-        <ExternalLink size={16} style={{ color: C.inkSoft }}/>
-        <div style={{ fontSize: 13, color: C.inkSoft }}>
-          In the full app, this becomes a shareable summary you can send to your doctor.
-        </div>
-      </Card>
+      {/* ── 5. REPORTS & INSIGHTS ────────────────────────── */}
+      <ReportsPanel accent={accent} showsCycle={showsCycle}/>
     </div>
   );
 }
