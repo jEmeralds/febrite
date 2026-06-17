@@ -23,16 +23,18 @@ import Assessment from "../features/assessment/Assessment";
 const Library = lazy(() => import("../features/Library"));
 const Article = lazy(() => import("../features/Article"));
 const Tracking = lazy(() => import("../features/Tracking"));
+const Community = lazy(() => import("../features/Community"));
 
 const NAV = [
   { id:"home", label:"Home", icon:HomeIcon },
   { id:"library", label:"Library", icon:BookOpen },
+  { id:"community", label:"Community", icon:Users },
   { id:"companion", label:"Companion", icon:MessageCircle },
   { id:"track", label:"Track", icon:Activity },
   { id:"team", label:"Care Team", icon:Stethoscope },
   { id:"resources", label:"Support", icon:LifeBuoy },
 ];
-const SOON = [{ label:"1:1 Consults", icon:Store }, { label:"Community", icon:Users }];
+const SOON = [{ label:"1:1 Consults", icon:Store }];
 
 const NavBtn = ({ icon:Icon, label, active, accent, onClick }) => (
   <button onClick={onClick} style={{ display:"flex", alignItems:"center", gap:11, padding:"10px 12px", borderRadius:11, border:"none", cursor:"pointer", textAlign:"left", fontSize:14.5, width:"100%", fontFamily:"Karla, sans-serif", transition:".2s", background:active?`${accent}16`:"transparent", color:active?accent:C.ink, fontWeight:active?700:400 }}><Icon size={18}/> {label}</button>
@@ -97,6 +99,7 @@ export default function Shell() {
   const Body = {
     home: <Home stage={activeStage} accent={accent} go={go} openArticle={openArticle}/>,
     library: <Library stage={activeStage} accent={accent} openArticle={openArticle} initialDomain={libDomain} onDomainChange={(d)=>{ const p = new URLSearchParams(); p.set("view","library"); if (d) p.set("domain",d); setSearchParams(p); }}/>,
+    community: <Community accent={accent}/>,
     article: article && <Article c={article} stage={activeStage} back={backToLibrary} go={go}/>,
     companion: <Companion stage={activeStage} accent={accent} go={go} openArticle={openArticle}/>,
     track: <Tracking stage={activeStage} accent={accent}/>,

@@ -12,17 +12,19 @@ import { supabase } from "./supabase";
    If a topic is set, we filter to that topic, but if fewer than 3
    voices match (because the seed corpus is small), we widen back to
    all topics for the same stage. Better one good voice than no voices. */
-export async function fetchVoices({ stage, topic = null, limit = 6 }) {
-  if (!supabase || !stage) return [];
+export async function fetchVoices({ stage = null, topic = null, limit = 6 }) {
+  if (!supabase) return [];
 
+  // stage=null means "all stages" (used by the Community page).
+  // stage="teen" etc. filters to one stage (used by the Library snippet).
   const tryQuery = async (withTopic) => {
     let q = supabase
       .from("community_voices")
       .select("*")
       .eq("status", "published")
-      .eq("stage", stage)
       .order("published_at", { ascending: false })
       .limit(limit);
+    if (stage) q = q.eq("stage", stage);
     if (withTopic && topic) q = q.eq("topic", topic);
     const { data, error } = await q;
     if (error) {
@@ -33,8 +35,9 @@ export async function fetchVoices({ stage, topic = null, limit = 6 }) {
   };
 
   let voices = await tryQuery(true);
+  // If topic-filtered comes back sparse, widen back to all topics so the
+  // page doesn't feel empty. Better one good voice than no voices.
   if (topic && voices.length < 3) {
-    // Widen back to all topics for this stage so the section isn't sparse
     voices = await tryQuery(false);
   }
   return voices;
