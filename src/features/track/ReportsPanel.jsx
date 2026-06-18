@@ -83,7 +83,7 @@ export default function ReportsPanel({ accent, showsCycle = true }) {
       <PrintStyles/>
 
       {/* Print-only header — only shows on paper */}
-      <div className="fb-print-only" style={{ display: "none" }}>
+      <div className="fb-reports-panel" style={{ display: "none" }}>
         <div style={{ fontFamily: "Fraunces, serif", fontSize: 22, marginBottom: 4 }}>FeBrite Report</div>
         <div style={{ fontSize: 13, color: "#666", marginBottom: 4 }}>
           {profile?.display_name || ""} {profile?.life_stage ? `· ${profile.life_stage}` : ""}
@@ -369,20 +369,41 @@ const navBtn = {
 function PrintStyles() {
   return (
     <style>{`
-      .fb-print-only { display: none; }
       @media print {
-        body.fb-printing-report * { visibility: hidden; }
-        body.fb-printing-report .fb-report-card,
-        body.fb-printing-report .fb-report-card *,
-        body.fb-printing-report .fb-print-only,
-        body.fb-printing-report .fb-print-only * { visibility: visible; }
-        body.fb-printing-report .fb-print-only { display: block !important; }
-        body.fb-printing-report .fb-no-print { display: none !important; }
-        body.fb-printing-report .fb-report-card {
-          position: absolute; left: 0; top: 0; width: 100%;
-          box-shadow: none !important; border: none !important; padding: 24px !important;
-        }
+        /* Hide everything by default */
+        body > * { display: none !important; }
+
+        /* Show only the root app container */
+        body > #root { display: block !important; }
+
+        /* Inside root, hide everything except the report panel */
+        #root > * { display: none !important; }
+
+        /* Show the main content area */
+        #root .fb-main-content,
+        #root main { display: block !important; }
+
+        /* Inside main, hide everything except the reports panel */
+        #root .fb-main-content > *,
+        #root main > * { display: none !important; }
+
+        /* Show only the reports panel */
+        .fb-reports-panel { display: block !important; }
+
+        /* Show the print-only header */
+        .fb-print-only { display: block !important; }
+
+        /* Hide interactive controls */
+        .fb-print-hide { display: none !important; }
+
+        /* Page layout */
         @page { margin: 18mm; }
+        body { background: white !important; }
+        .fb-reports-panel { 
+          padding: 0 !important; 
+          box-shadow: none !important;
+          border: none !important;
+        }
       }
     `}</style>
   );
