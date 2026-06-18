@@ -370,39 +370,56 @@ function PrintStyles() {
   return (
     <style>{`
       @media print {
-        /* Hide everything by default */
-        body > * { display: none !important; }
+        @page { margin: 18mm; size: A4 portrait; }
+        
+        /* Hide app chrome */
+        nav,
+        aside,
+        header,
+        [class*="sidebar"],
+        [class*="Sidebar"],
+        [class*="nav-"],
+        [class*="NavBar"],
+        [class*="bottom-nav"],
+        [class*="BottomNav"],
+        .fb-print-hide { 
+          display: none !important; 
+        }
 
-        /* Show only the root app container */
-        body > #root { display: block !important; }
+        /* Reset body/main layout so report fills the page */
+        body, #root {
+          display: block !important;
+          background: white !important;
+          overflow: visible !important;
+        }
 
-        /* Inside root, hide everything except the report panel */
-        #root > * { display: none !important; }
+        /* Flatten all layout wrappers */
+        #root > * {
+          display: block !important;
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
 
-        /* Show the main content area */
-        #root .fb-main-content,
-        #root main { display: block !important; }
+        /* Show print-only header */
+        .fb-print-only { 
+          display: block !important; 
+          margin-bottom: 24px;
+        }
 
-        /* Inside main, hide everything except the reports panel */
-        #root .fb-main-content > *,
-        #root main > * { display: none !important; }
+        /* Make sure report panel and all its children are visible */
+        .fb-reports-panel,
+        .fb-reports-panel * {
+          visibility: visible !important;
+          overflow: visible !important;
+        }
 
-        /* Show only the reports panel */
-        .fb-reports-panel { display: block !important; }
-
-        /* Show the print-only header */
-        .fb-print-only { display: block !important; }
-
-        /* Hide interactive controls */
-        .fb-print-hide { display: none !important; }
-
-        /* Page layout */
-        @page { margin: 18mm; }
-        body { background: white !important; }
-        .fb-reports-panel { 
-          padding: 0 !important; 
+        /* Clean up card styling for print */
+        .fb-reports-panel {
           box-shadow: none !important;
           border: none !important;
+          padding: 0 !important;
         }
       }
     `}</style>
