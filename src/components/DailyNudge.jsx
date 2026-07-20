@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CalendarCheck, ChevronRight, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { hasCheckedInToday } from "../lib/tracking";
+import { hasCheckedInToday } from "../lib/trackingApi";
 import { currentCyclePhase } from "../lib/cycleMath";
 import { C } from "../theme/tokens";
 

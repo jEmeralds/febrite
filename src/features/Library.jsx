@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useTheme } from "../theme/ThemeProvider";
 import { DOMAINS } from "../data/content";
 import { askCompanion, suggestedQuestions } from "../lib/companion";
-import { getRecentEntries } from "../lib/tracking";
+import { getRecentEntries } from "../lib/trackingApi";
 
 /* The "library" is now an ask-anything companion surface, scoped to *her*.
    Suggested questions are generated from her current state (cycle phase,

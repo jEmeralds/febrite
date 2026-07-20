@@ -11,7 +11,7 @@ import { C } from "../../theme/tokens";
 import { Card } from "../../components/ui";
 import { PageHeader } from "../../components/Logo";
 import { useReduceMotionPref } from "../../lib/usePreferences";
-import { getRecentEntries } from "../../lib/tracking";
+import { getRecentEntries } from "../../lib/trackingApi";
 import { supabase } from "../../lib/supabase";
 
 const SUPPORT_EMAIL = "hello.febrite@gmail.com";

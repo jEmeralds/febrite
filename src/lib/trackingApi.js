@@ -89,3 +89,21 @@ export function buildChartData(entries, days = 14) {
   }
   return out;
 }
+
+// Quick boolean check — used by Home/DailyNudge to show a nudge if not logged.
+export async function hasCheckedInToday(userId) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  try {
+    const { data, error } = await supabase
+      .from("tracking_entries")
+      .select("entry_date")
+      .eq("user_id", userId)
+      .eq("entry_date", todayStr)
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
+  } catch (e) {
+    console.error("hasCheckedInToday failed", e);
+    return false;
+  }
+}

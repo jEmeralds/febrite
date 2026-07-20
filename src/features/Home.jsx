@@ -6,7 +6,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { Card, C } from "../components/ui";
 import { fetchDailyRead } from "../lib/companion";
-import { getRecentEntries, hasCheckedInToday } from "../lib/tracking";
+import { getRecentEntries, hasCheckedInToday } from "../lib/trackingApi";
 import { recentObservations } from "../lib/observations";
 import { currentCyclePhase } from "../lib/cycleMath";
 import { useCurrentDate } from "../lib/useCurrentDate";
