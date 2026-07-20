@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Smile, Meh, Frown, Zap, Battery, BatteryLow, Droplet, Footprints,
@@ -11,8 +11,9 @@ import {
 import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
 import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/tracking";
-import { currentCyclePhase } from "../lib/cycleMath";
+import { currentPhase, getPhaseLogs, computeCycleStats } from "../lib/cyclePhases";
 import { useCurrentDate } from "../lib/useCurrentDate";
+import CycleMonthCalendar from "../components/CycleMonthCalendar";
 import ReportsPanel from "./track/ReportsPanel";
 
 const MOODS = [
@@ -53,86 +54,56 @@ const PHASE_COLOR = {
   Ovulation:  "#D08C3B",
   Luteal:     "#7E5FA4",
 };
+// lowercase enum -> display label, since cycle_phase_logs stores lowercase
+const PHASE_TITLE = { menstrual:"Menstrual", follicular:"Follicular", ovulation:"Ovulation", luteal:"Luteal" };
 
-/* ── Cycle wheel ─────────────────────────────────────────── */
-function BigCycleWheel({ profile, accent, size = 320 }) {
-  const cyc = currentCyclePhase(profile);
-  if (!cyc) return <CycleWheelEmpty size={size}/>;
-
-  const cycleLen  = cyc.cycleLen;
-  const periodLen = Math.max(2, Math.min(10, profile?.period_length || 5));
-  const ovDay     = cycleLen - 14;
-  const phaseColor = PHASE_COLOR[cyc.phase] || accent;
-
-  const phases = [
-    { name: "Menstrual",  start: 1,             end: periodLen   },
-    { name: "Follicular", start: periodLen + 1, end: ovDay - 2   },
-    { name: "Ovulation",  start: ovDay - 1,     end: ovDay + 1   },
-    { name: "Luteal",     start: ovDay + 2,     end: cycleLen    },
-  ];
-
-  const cx = size / 2, cy = size / 2, r = (size / 2) - 22, sw = 22;
-  const dayToDeg = (d) => ((d - 1) / cycleLen) * 360;
-  const polar = (deg, radius) => {
-    const rad = ((deg - 90) * Math.PI) / 180;
-    return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
-  };
-  const arc = (startDeg, endDeg) => {
-    const [x1,y1] = polar(startDeg, r), [x2,y2] = polar(endDeg, r);
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${endDeg - startDeg > 180 ? 1 : 0} 1 ${x2} ${y2}`;
-  };
-
-  const todayDeg = dayToDeg(cyc.dayInCycle);
-  const [mx, my] = polar(todayDeg, r);
-
+/* ── Phase status (replaces the fixed-proportion cycle wheel) ───────────
+   No wheel, because a wheel implies every phase is a fixed slice of a
+   fixed-length cycle — exactly the assumption we're removing. Instead:
+   a plain, honest readout of what's actually been logged. */
+function PhaseStatusEmpty({ onLog }) {
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display:"block" }}>
-      <defs>
-        <filter id="wheel-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="6" result="blur"/>
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(44,35,32,.05)" strokeWidth={sw}/>
-      {phases.map((p) => {
-        const startDeg = dayToDeg(p.start);
-        const endDeg   = p.end >= cycleLen ? 360 : dayToDeg(p.end + 1);
-        const isCurrent = p.name === cyc.phase;
-        return (
-          <path key={p.name} d={arc(startDeg, endDeg)} fill="none"
-            stroke={PHASE_COLOR[p.name]} strokeWidth={sw}
-            opacity={isCurrent ? 1 : 0.22}
-            filter={isCurrent ? "url(#wheel-glow)" : undefined}/>
-        );
-      })}
-      {Array.from({ length: Math.ceil(cycleLen / 7) }).map((_, i) => {
-        const day = (i + 1) * 7;
-        if (day > cycleLen) return null;
-        const deg = dayToDeg(day);
-        const [tx1,ty1] = polar(deg, r - sw/2 - 2), [tx2,ty2] = polar(deg, r - sw/2 - 8);
-        return <line key={day} x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke="rgba(44,35,32,.25)" strokeWidth={1.5}/>;
-      })}
-      <circle cx={mx} cy={my} r={18} fill={`${phaseColor}33`}/>
-      <circle cx={mx} cy={my} r={13} fill="#fff" stroke={phaseColor} strokeWidth={3.5}/>
-      <circle cx={mx} cy={my} r={5}  fill={phaseColor}/>
-      <text x={cx} y={cy-28} textAnchor="middle" fontFamily="Karla,sans-serif" fontSize={11} fontWeight={700} fill="rgba(44,35,32,.5)" letterSpacing=".18em">CYCLE DAY</text>
-      <text x={cx} y={cy+18} textAnchor="middle" fontFamily="Fraunces,serif" fontSize={68} fill="#2C2320" letterSpacing="-.02em">{cyc.dayInCycle}</text>
-      <text x={cx} y={cy+48} textAnchor="middle" fontFamily="Karla,sans-serif" fontSize={13.5} fontWeight={700} fill={phaseColor} letterSpacing=".12em">{cyc.phase.toUpperCase()}</text>
-      <text x={cx} y={cy+70} textAnchor="middle" fontFamily="Karla,sans-serif" fontSize={11.5} fill="rgba(44,35,32,.5)">of ~{cycleLen}</text>
-    </svg>
+    <div style={{ textAlign: "center", padding: "20px 10px" }}>
+      <Flower2 size={32} style={{ color: "rgba(44,35,32,.4)", marginBottom: 10 }} />
+      <div style={{ fontFamily: "Fraunces,serif", fontSize: 18, color: C.ink, marginBottom: 6 }}>No phase logged yet</div>
+      <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 14, lineHeight: 1.5, maxWidth: 240, margin: "0 auto 14px" }}>
+        Tap a day on the calendar to log when your period (or another phase) actually started.
+      </div>
+      <button onClick={onLog} style={{ fontSize: 13, fontWeight: 700, background: C.clay, color: "#fff", border: "none", padding: "9px 16px", borderRadius: 10, cursor: "pointer" }}>
+        Log today
+      </button>
+    </div>
   );
 }
 
-function CycleWheelEmpty({ size = 320 }) {
+function PhaseStatusCard({ phaseNow, stats, accent }) {
   const nav = useNavigate();
+  if (!phaseNow) return <PhaseStatusEmpty onLog={() => {}} />;
+
+  const color = PHASE_COLOR[PHASE_TITLE[phaseNow.phase]] || accent;
+  const avgForThisPhase = stats?.byPhase?.[phaseNow.phase];
+
   return (
-    <div style={{ width:size, height:size, borderRadius:"50%", border:"2px dashed rgba(44,35,32,.18)", display:"grid", placeItems:"center", textAlign:"center", padding:32 }}>
-      <div>
-        <Flower2 size={36} style={{ color:"rgba(44,35,32,.4)", marginBottom:12 }}/>
-        <div style={{ fontFamily:"Fraunces,serif", fontSize:19, color:C.ink, marginBottom:6 }}>Tell us your cycle start</div>
-        <div style={{ fontSize:13, color:C.inkSoft, marginBottom:14, lineHeight:1.5, maxWidth:200, margin:"0 auto 14px" }}>Add the date your last period started, and your wheel comes alive.</div>
-        <button onClick={() => nav("/profile")} style={{ fontSize:13, fontWeight:700, background:C.clay, color:"#fff", border:"none", padding:"9px 16px", borderRadius:10, cursor:"pointer" }}>Open profile</button>
+    <div style={{ textAlign: "center", padding: "10px 6px" }}>
+      <div style={{ fontSize: 11, color: C.inkSoft, fontWeight: 700, letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 10 }}>
+        Day {phaseNow.dayInPhase} of this phase
       </div>
+      <div style={{ width: 132, height: 132, borderRadius: "50%", margin: "0 auto 16px", display: "grid", placeItems: "center", background: `${color}14`, border: `3px solid ${color}` }}>
+        <div>
+          <div style={{ fontFamily: "Fraunces,serif", fontSize: 40, color: "#2C2320", lineHeight: 1 }}>{phaseNow.dayInPhase}</div>
+        </div>
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 700, color, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
+        {PHASE_TITLE[phaseNow.phase]}
+      </div>
+      {avgForThisPhase && (
+        <div style={{ fontSize: 12.5, color: C.inkSoft }}>
+          Your {PHASE_TITLE[phaseNow.phase].toLowerCase()} phase usually runs ~{Math.round(avgForThisPhase.avgDays)} day{Math.round(avgForThisPhase.avgDays)===1?"":"s"} ({avgForThisPhase.count} logged)
+        </div>
+      )}
+      {!avgForThisPhase && (
+        <div style={{ fontSize: 12.5, color: C.inkSoft }}>Log a few more cycles and we'll show your real average here.</div>
+      )}
     </div>
   );
 }
@@ -150,36 +121,35 @@ function weeklyStreak(entries) {
   return count;
 }
 
-function TrackHero({ profile, entries, accent, todayLogged }) {
-  const cyc        = currentCyclePhase(profile);
-  const phaseColor = cyc ? PHASE_COLOR[cyc.phase] || accent : accent;
+function TrackHero({ entries, accent, todayLogged, phaseNow, stats }) {
+  const phaseColor = phaseNow ? (PHASE_COLOR[PHASE_TITLE[phaseNow.phase]] || accent) : accent;
   const streak     = useMemo(() => weeklyStreak(entries), [entries]);
 
   const phraseFor = (phase) => {
-    if (!phase)              return "Your cycle, your read of you.";
-    if (phase==="Menstrual") return "Your period is here. Be gentle with yourself.";
-    if (phase==="Follicular")return "Energy and clarity are usually rising now.";
-    if (phase==="Ovulation") return "You're at the peak of your cycle.";
+    if (!phase)                return "Your cycle, your read of you.";
+    if (phase === "menstrual") return "Your period is here. Be gentle with yourself.";
+    if (phase === "follicular")return "Energy and clarity are usually rising now.";
+    if (phase === "ovulation") return "You're at the peak of your cycle.";
     return "PMS, mood, fatigue — your luteal phase is showing.";
   };
 
   return (
-    <Card style={{ marginBottom:22, padding:"32px 28px", background:cyc?`radial-gradient(120% 80% at 18% 50%, ${phaseColor}18, ${C.card} 65%)`:C.card, position:"relative", overflow:"hidden" }}>
+    <Card style={{ marginBottom:22, padding:"32px 28px", background:phaseNow?`radial-gradient(120% 80% at 18% 50%, ${phaseColor}18, ${C.card} 65%)`:C.card, position:"relative", overflow:"hidden" }}>
       <div className="fb-track-hero-grid" style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:36, alignItems:"center" }}>
         <div style={{ display:"grid", placeItems:"center" }}>
-          <BigCycleWheel profile={profile} accent={accent}/>
+          <PhaseStatusCard phaseNow={phaseNow} stats={stats} accent={accent} />
         </div>
         <div>
           <div style={{ fontSize:12, color:C.inkSoft, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", marginBottom:8 }}>
             Today · {new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}
           </div>
           <h1 style={{ fontFamily:"Fraunces,serif", fontWeight:400, fontSize:"clamp(24px,3.5vw,34px)", lineHeight:1.15, margin:"0 0 14px", color:C.ink, letterSpacing:"-.01em" }}>
-            {phraseFor(cyc?.phase)}
+            {phraseFor(phaseNow?.phase)}
           </h1>
-          {cyc && (
+          {stats?.avgCycleLength && (
             <div style={{ fontSize:15, color:C.inkSoft, lineHeight:1.6, marginBottom:20, maxWidth:380 }}>
-              Day {cyc.dayInCycle} of a ~{cyc.cycleLen}-day cycle.{" "}
-              <b style={{ color:phaseColor }}>~{cyc.daysUntilPeriod} day{cyc.daysUntilPeriod===1?"":"s"}</b> until your next period begins.
+              Your cycles have averaged <b style={{ color:phaseColor }}>~{Math.round(stats.avgCycleLength)} days</b>{" "}
+              across {stats.cyclesObserved} logged cycle{stats.cyclesObserved===1?"":"s"} — an observation, not a prediction.
             </div>
           )}
           <div style={{ display:"flex", gap:24, flexWrap:"wrap", alignItems:"center" }}>
@@ -202,43 +172,6 @@ function TrackHero({ profile, entries, accent, todayLogged }) {
       </div>
       <style>{`@media(max-width:760px){.fb-track-hero-grid{grid-template-columns:1fr!important;justify-items:center;text-align:center;gap:22px!important;}}`}</style>
     </Card>
-  );
-}
-
-/* ── Cycle calendar ───────────────────────────────────────── */
-function CycleCalendar({ profile, entries, accent }) {
-  const today = new Date();
-  const days  = [];
-  for (let i = 27; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
-    const phase   = currentCyclePhase(profile, d)?.phase;
-    const entry   = entries.find((e) => e.entry_date === dateStr);
-    days.push({ date:d, dateStr, phase, entry, isToday:i===0 });
-  }
-  return (
-    <div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
-        {days.map((d) => {
-          const color = d.phase ? PHASE_COLOR[d.phase] : null;
-          return (
-            <div key={d.dateStr} title={`${d.dateStr}${d.phase?" · "+d.phase:""}${d.entry?" · logged":""}`}
-              style={{ aspectRatio:"1", minHeight:36, borderRadius:"50%", background:color?`${color}22`:"rgba(44,35,32,.04)", border:d.isToday?`2px solid ${accent}`:"2px solid transparent", display:"grid", placeItems:"center", position:"relative", fontSize:11.5, color:C.ink, fontWeight:d.isToday?700:500 }}>
-              {d.date.getDate()}
-              {d.entry && <div style={{ position:"absolute", bottom:3, width:4, height:4, borderRadius:"50%", background:color||C.ink }}/>}
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ display:"flex", gap:14, marginTop:14, flexWrap:"wrap", fontSize:11.5, color:C.inkSoft }}>
-        {Object.entries(PHASE_COLOR).map(([name,color]) => (
-          <div key={name} style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <span style={{ width:9, height:9, borderRadius:"50%", background:color }}/><span>{name}</span>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -280,14 +213,13 @@ function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, lo
           <div style={{ marginTop:22, paddingTop:22, borderTop:`1px solid ${C.line}` }}>
             {showsCycle && (
               <>
-                <Lbl>Cycle phase <span style={{ color:C.inkSoft, fontWeight:400 }}>(only if it feels different from what we're showing)</span></Lbl>
+                <Lbl>Cycle phase <span style={{ color:C.inkSoft, fontWeight:400 }}>(only if it feels different from what the calendar shows)</span></Lbl>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   {PHASES.map((p) => (
                     <Chip key={p} active={today.phase===p} onClick={() => set("phase", today.phase===p ? null : p)} accent={accent}>{p}</Chip>
                   ))}
                 </div>
 
-                {/* Flow intensity — only when Menstrual */}
                 {isMenstrual && (
                   <div style={{ marginTop:14, padding:"14px 16px", borderRadius:12, background:"rgba(196,74,74,.06)", border:"1px solid rgba(196,74,74,.18)" }}>
                     <Lbl>Flow intensity</Lbl>
@@ -308,7 +240,6 @@ function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, lo
               ))}
             </div>
 
-            {/* Severity — shows for each selected symptom */}
             {today.symptoms.length > 0 && (
               <div style={{ marginTop:14, display:"flex", flexDirection:"column", gap:10 }}>
                 {today.symptoms.map((sym) => (
@@ -499,8 +430,21 @@ export default function Tracking({ stage, accent }) {
   const [logged,  setLogged]  = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [entries, setEntries] = useState([]);
+  const [phaseLogs, setPhaseLogs] = useState([]);
+  const [phaseNow, setPhaseNow] = useState(null);
   const showsCycle = !["elder"].includes(stage);
   const todayDate  = useCurrentDate();
+
+  const stats = useMemo(() => computeCycleStats(phaseLogs), [phaseLogs]);
+
+  const reloadPhaseData = useCallback(async () => {
+    if (!user) return;
+    const [logs, now] = await Promise.all([getPhaseLogs(user.id, null, null), currentPhase(user.id)]);
+    setPhaseLogs(logs);
+    setPhaseNow(now);
+  }, [user]);
+
+  useEffect(() => { reloadPhaseData(); }, [reloadPhaseData]);
 
   useEffect(() => {
     if (!user) return;
@@ -566,19 +510,19 @@ export default function Tracking({ stage, accent }) {
 
   return (
     <div style={{ paddingBottom:60 }}>
-      <TrackHero profile={profile} entries={entries} accent={accent} todayLogged={logged}/>
+      <TrackHero entries={entries} accent={accent} todayLogged={logged} phaseNow={phaseNow} stats={stats}/>
       <div className="fb-track-mid" style={{ display:"grid", gap:18, gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)" }}>
         <div>
           <CheckInPanel today={today} set={set} toggleSymptom={toggleSymptom} setSeverity={setSeverity} save={save} saving={saving} logged={logged} accent={accent} showsCycle={showsCycle}/>
         </div>
-        {showsCycle && currentCyclePhase(profile) && (
+        {showsCycle && (
           <div>
             <Card>
               <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:14 }}>
                 <CalendarHeart size={16} style={{ color:accent }}/>
-                <div style={{ fontFamily:"Fraunces,serif", fontSize:"clamp(17px,3.5vw,20px)", color:C.ink }}>Last 28 days</div>
+                <div style={{ fontFamily:"Fraunces,serif", fontSize:"clamp(17px,3.5vw,20px)", color:C.ink }}>Your cycle calendar</div>
               </div>
-              <CycleCalendar profile={profile} entries={entries} accent={accent}/>
+              <CycleMonthCalendar userId={user?.id} logs={phaseLogs} accent={accent} onChanged={reloadPhaseData}/>
             </Card>
           </div>
         )}
