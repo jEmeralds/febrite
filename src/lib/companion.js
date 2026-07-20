@@ -1,4 +1,4 @@
-import { getRecentEntries } from "./tracking";
+import { getRecentEntries } from "./trackingApi";
 import { currentCyclePhase } from "./cycleMath";
 
 const API = import.meta.env.VITE_API_URL;
