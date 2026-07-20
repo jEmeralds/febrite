@@ -13,7 +13,7 @@ import { Card, SectionHead, C } from "../components/ui";
 import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/tracking";
 import { currentCyclePhase } from "../lib/cycleMath";
 import { useCurrentDate } from "../lib/useCurrentDate";
-import ReportsPanel from "./track/ReportsPanel";
+import ReportsPanel from "../features/track/ReportsPanel";
 
 const MOODS = [
   { icon: Frown,  label: "Low",   v: 1 },
