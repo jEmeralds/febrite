@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
-import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/tracking";
+import { saveTodayEntry, getRecentEntries, buildChartData } from "./trackingApi";
 import { currentCyclePhase } from "../lib/cycleMath";
 import { useCurrentDate } from "../lib/useCurrentDate";
 import ReportsPanel from "../features/track/ReportsPanel";
