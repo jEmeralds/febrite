@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Trash2, Plus, Minus } from "lucide-react";
 import { Card, C } from "./ui";
 import { logPhaseRange, deletePhaseLog, PHASES } from "../lib/cyclePhases";
 
@@ -37,42 +37,38 @@ function phaseForDate(logs, dateStr) {
   return log || null;
 }
 
-export default function CycleMonthCalendar({ userId, logs, accent, onChanged }) {
+export default function CycleMonthCalendar({ userId, logs, accent, onChanged, todayDate }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
-  const [selecting, setSelecting] = useState(null); // { start: dateStr } while picking a range
-  const [rangeEnd, setRangeEnd] = useState(null);
-  const [pickerFor, setPickerFor] = useState(null); // { start, end } once range is chosen -> show phase picker
+  const [pickerFor, setPickerFor] = useState(null); // { start, end } — single tap opens this immediately
   const [dayInfo, setDayInfo] = useState(null); // clicked an already-logged day -> show edit/delete
   const [saving, setSaving] = useState(false);
 
-  const todayStr = iso(new Date());
+  // Always defer to the same date source as the rest of the page (useCurrentDate),
+  // so "today" never disagrees between the hero and the calendar.
+  const todayStr = todayDate || iso(new Date());
   const cells = useMemo(() => buildMonthGrid(month), [month]);
   const monthLabel = month.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   const goMonth = (delta) => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
 
+  // Single tap: if the day already has a log, show it (with edit/delete).
+  // Otherwise open the phase picker immediately for that single day — the
+  // person can widen it to a range right there in the picker, no drag needed.
   const handleDayClick = (dateStr) => {
     const existing = phaseForDate(logs, dateStr);
-    if (!selecting) {
-      if (existing) { setDayInfo({ dateStr, log: existing }); return; }
-      setSelecting({ start: dateStr });
-      setRangeEnd(dateStr);
-    } else {
-      const start = selecting.start <= dateStr ? selecting.start : dateStr;
-      const end   = selecting.start <= dateStr ? dateStr : selecting.start;
-      setPickerFor({ start, end });
-      setSelecting(null);
-      setRangeEnd(null);
-    }
+    if (existing) { setDayInfo({ dateStr, log: existing }); return; }
+    setPickerFor({ start: dateStr, end: dateStr });
   };
 
-  const handleDayHover = (dateStr) => { if (selecting) setRangeEnd(dateStr); };
-
-  const inPendingRange = (dateStr) => {
-    if (!selecting) return false;
-    const a = selecting.start <= rangeEnd ? selecting.start : rangeEnd;
-    const b = selecting.start <= rangeEnd ? rangeEnd : selecting.start;
-    return dateStr >= a && dateStr <= b;
+  const extendPickerEnd = (delta) => {
+    setPickerFor((p) => {
+      if (!p) return p;
+      const d = new Date(p.end + "T00:00:00");
+      d.setDate(d.getDate() + delta);
+      const newEnd = iso(d);
+      if (newEnd < p.start) return p;
+      return { ...p, end: newEnd };
+    });
   };
 
   const confirmPhase = async (phase) => {
@@ -106,15 +102,9 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged }) 
         <button onClick={() => goMonth(1)} style={navBtn}><ChevronRight size={16} /></button>
       </div>
 
-      {!selecting ? (
-        <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 10 }}>
-          Tap a start day, then an end day, to log an actual phase range.
-        </div>
-      ) : (
-        <div style={{ fontSize: 12, color: accent, marginBottom: 10, fontWeight: 600 }}>
-          Pick the end day for this phase (or tap the same day for a single day).
-        </div>
-      )}
+      <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 10 }}>
+        Tap any day to log a phase — you can extend it to more days in the next step.
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 6 }}>
         {["S","M","T","W","T","F","S"].map((d, i) => (
@@ -129,16 +119,14 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged }) 
           const log = phaseForDate(logs, dateStr);
           const color = log ? PHASE_COLOR[log.phase] : null;
           const isToday = dateStr === todayStr;
-          const pending = inPendingRange(dateStr);
           return (
             <button
               key={dateStr}
               onClick={() => handleDayClick(dateStr)}
-              onMouseEnter={() => handleDayHover(dateStr)}
               title={log ? `${dateStr} · ${PHASE_LABEL[log.phase]}${!log.end_date ? " · ongoing" : ""}` : dateStr}
               style={{
                 aspectRatio: "1", minHeight: 34, borderRadius: 10, border: isToday ? `2px solid ${accent}` : "1px solid transparent",
-                background: pending ? `${accent}33` : color ? `${color}2A` : "rgba(44,35,32,.035)",
+                background: color ? `${color}2A` : "rgba(44,35,32,.035)",
                 color: C.ink, fontSize: 12, fontWeight: isToday ? 700 : 500, cursor: "pointer",
                 display: "grid", placeItems: "center", position: "relative", fontFamily: "Karla,sans-serif",
               }}
@@ -161,19 +149,30 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged }) 
         ))}
       </div>
 
-      {selecting && (
-        <button onClick={() => { setSelecting(null); setRangeEnd(null); }} style={{ marginTop: 10, fontSize: 12, color: C.inkSoft, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-          Cancel selection
-        </button>
-      )}
-
-      {/* Phase picker for a chosen range */}
+      {/* Phase picker — opens on a single tap; range is adjustable right here */}
       {pickerFor && (
         <Overlay onClose={() => setPickerFor(null)}>
-          <div style={{ fontSize: 14, color: C.ink, marginBottom: 4, fontWeight: 600 }}>
-            {pickerFor.start === pickerFor.end ? pickerFor.start : `${pickerFor.start} → ${pickerFor.end}`}
+          <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 4 }}>Logging phase starting</div>
+          <div style={{ fontSize: 15, color: C.ink, marginBottom: 14, fontWeight: 600 }}>{pickerFor.start}</div>
+
+          <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 6 }}>How many days did it last?</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <button onClick={() => extendPickerEnd(-1)} disabled={pickerFor.end === pickerFor.start}
+              style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${C.line}`, background: "transparent", cursor: "pointer", display: "grid", placeItems: "center" }}>
+              <Minus size={14} />
+            </button>
+            <div style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 600, color: C.ink }}>
+              {Math.round((new Date(pickerFor.end) - new Date(pickerFor.start)) / 86400000) + 1} day
+              {Math.round((new Date(pickerFor.end) - new Date(pickerFor.start)) / 86400000) === 0 ? "" : "s"}
+              {pickerFor.end !== pickerFor.start && <span style={{ color: C.inkSoft, fontWeight: 400 }}> · through {pickerFor.end}</span>}
+            </div>
+            <button onClick={() => extendPickerEnd(1)}
+              style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${C.line}`, background: "transparent", cursor: "pointer", display: "grid", placeItems: "center" }}>
+              <Plus size={14} />
+            </button>
           </div>
-          <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 14 }}>What phase was this?</div>
+
+          <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>What phase was this?</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {PHASES.map((p) => (
               <button key={p} disabled={saving} onClick={() => confirmPhase(p)}

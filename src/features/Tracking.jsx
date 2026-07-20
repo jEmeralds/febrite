@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
-import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/trackingApi";
+import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/tracking";
 import { currentPhase, getPhaseLogs, computeCycleStats } from "../lib/cyclePhases";
 import { useCurrentDate } from "../lib/useCurrentDate";
 import CycleMonthCalendar from "../components/CycleMonthCalendar";
@@ -522,7 +522,7 @@ export default function Tracking({ stage, accent }) {
                 <CalendarHeart size={16} style={{ color:accent }}/>
                 <div style={{ fontFamily:"Fraunces,serif", fontSize:"clamp(17px,3.5vw,20px)", color:C.ink }}>Your cycle calendar</div>
               </div>
-              <CycleMonthCalendar userId={user?.id} logs={phaseLogs} accent={accent} onChanged={reloadPhaseData}/>
+              <CycleMonthCalendar userId={user?.id} logs={phaseLogs} accent={accent} onChanged={reloadPhaseData} todayDate={todayDate}/>
             </Card>
           </div>
         )}
