@@ -236,6 +236,19 @@ function nextDay(dateStr) {
 
 export { PHASES };
 
+// Sync version of currentPhase() for callers that already have the full
+// logs array loaded (e.g. Home.jsx, which fetches once and derives
+// everything from the same list — keeping every card on the page in
+// agreement instead of each firing its own DB call).
+export function derivePhaseNow(logs, todayStr) {
+  const open = logs.find((l) => !l.end_date);
+  if (!open) return null;
+  const start = new Date(open.start_date + "T00:00:00");
+  const today = new Date((todayStr || open.start_date) + "T00:00:00");
+  const days = Math.floor((today - start) / 86400000) + 1;
+  return { phase: open.phase, dayInPhase: days, startDate: open.start_date, logId: open.id };
+}
+
 /* ---------- current-cycle wheel data (real segments, no fixed math) ---------- */
 
 // Builds the shape of THIS cycle so far, purely from what's been logged.

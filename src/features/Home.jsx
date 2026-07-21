@@ -8,98 +8,29 @@ import { Card, C } from "../components/ui";
 import { fetchDailyRead } from "../lib/companion";
 import { getRecentEntries, hasCheckedInToday } from "../lib/trackingApi";
 import { recentObservations } from "../lib/observations";
-import { currentCyclePhase } from "../lib/cycleMath";
+import { getPhaseLogs, derivePhaseNow, buildCurrentCycleWheelData, computeCycleStats } from "../lib/cyclePhases";
+import MiniCycleWheel from "../components/MiniCycleWheel";
 import { useCurrentDate } from "../lib/useCurrentDate";
 
 const PHASE_COLOR = {
-  Menstrual: "#C44A4A", Follicular: "#3F7B5A", Ovulation: "#D08C3B", Luteal: "#7E5FA4",
+  menstrual: "#C44A4A", follicular: "#3F7B5A", ovulation: "#D08C3B", luteal: "#7E5FA4",
 };
-
-/* ============================================================
-   MINI CYCLE WHEEL — compact version for Home's cycle snapshot
-   ============================================================ */
-function MiniCycleWheel({ profile, size = 130 }) {
-  const cyc = currentCyclePhase(profile);
-  if (!cyc) return null;
-  const cycleLen  = cyc.cycleLen;
-  const periodLen = Math.max(2, Math.min(10, profile?.period_length || 5));
-  const ovDay     = cycleLen - 14;
-  const phaseColor = PHASE_COLOR[cyc.phase] || C.clay;
-
-  const cx = size / 2, cy = size / 2;
-  const r = size / 2 - 11;
-  const sw = 11;
-
-  const phases = [
-    { name: "Menstrual",  start: 1,             end: periodLen },
-    { name: "Follicular", start: periodLen + 1, end: ovDay - 2 },
-    { name: "Ovulation",  start: ovDay - 1,     end: ovDay + 1 },
-    { name: "Luteal",     start: ovDay + 2,     end: cycleLen },
-  ];
-  const dayToDeg = (d) => ((d - 1) / cycleLen) * 360;
-  const polar = (deg, radius) => {
-    const rad = ((deg - 90) * Math.PI) / 180;
-    return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
-  };
-  const arc = (a, b) => {
-    const [x1, y1] = polar(a, r);
-    const [x2, y2] = polar(b, r);
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${b - a > 180 ? 1 : 0} 1 ${x2} ${y2}`;
-  };
-  const todayDeg = dayToDeg(cyc.dayInCycle);
-  const [mx, my] = polar(todayDeg, r);
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(44,35,32,.05)" strokeWidth={sw}/>
-      {phases.map((p) => {
-        const a = dayToDeg(p.start);
-        const b = p.end >= cycleLen ? 360 : dayToDeg(p.end + 1);
-        return (
-          <path key={p.name} d={arc(a, b)} fill="none"
-                stroke={PHASE_COLOR[p.name]} strokeWidth={sw}
-                opacity={p.name === cyc.phase ? 1 : 0.25}/>
-        );
-      })}
-      <circle cx={mx} cy={my} r={8} fill="#fff" stroke={phaseColor} strokeWidth={2.5}/>
-      <circle cx={mx} cy={my} r={3} fill={phaseColor}/>
-      <text x={cx} y={cy + 4} textAnchor="middle" fontFamily="Fraunces, serif"
-            fontSize={28} fill={C.ink}>{cyc.dayInCycle}</text>
-      <text x={cx} y={cy + 22} textAnchor="middle" fontFamily="Karla, sans-serif"
-            fontSize={9.5} fontWeight={700} fill={phaseColor} letterSpacing=".1em">
-        {cyc.phase.toUpperCase()}
-      </text>
-    </svg>
-  );
-}
+const PHASE_TITLE = { menstrual:"Menstrual", follicular:"Follicular", ovulation:"Ovulation", luteal:"Luteal" };
 
 /* ============================================================
    DAILY READ — the Gemini paragraph at the top of Home
 
    The card's background tint comes from the user's current cycle
-   phase (rose / sage / amber / plum). This is the variety the user
-   was asking for — the card "feels alive" because its color
-   subtly shifts as her body moves through the month — without
-   the visual chaos of randomizing the whole card every load.
+   phase (rose / sage / amber / plum), now sourced from real logs
+   instead of fixed-math prediction.
    ============================================================ */
-const PHASE_TINT = {
-  Menstrual:  "#C44A4A",
-  Follicular: "#3F7B5A",
-  Ovulation:  "#D08C3B",
-  Luteal:     "#7E5FA4",
-};
-
-function DailyReadCard({ profile, accent }) {
+function DailyReadCard({ profile, accent, phaseNow }) {
   const { user } = useAuth();
   const [state, setState] = useState({ text: "", loading: true });
   const [feedback, setFeedback] = useState(null); // null | "up" | "down"
   const todayDate = useCurrentDate(); // ticks at midnight
 
-  // The tint color = current phase color, or default accent if
-  // we don't know a phase (elder users, or anyone without
-  // cycle_start_date set).
-  const cyc = currentCyclePhase(profile);
-  const tint = cyc ? (PHASE_TINT[cyc.phase] || accent) : accent;
+  const tint = phaseNow ? (PHASE_COLOR[phaseNow.phase] || accent) : accent;
 
   useEffect(() => {
     let alive = true;
@@ -108,7 +39,7 @@ function DailyReadCard({ profile, accent }) {
       if (alive) setState({ text: res.text, loading: false });
     });
     return () => { alive = false; };
-  }, [user?.id, profile?.life_stage, profile?.cycle_start_date, todayDate]);
+  }, [user?.id, profile?.life_stage, todayDate]);
 
   const regenerate = async () => {
     setState({ text: "", loading: true });
@@ -188,21 +119,18 @@ const feedbackBtn = (color) => ({
 /* ============================================================
    QUICK ACTIONS — three or four meaningful one-taps from Home
    ============================================================ */
-function QuickActions({ go, accent, profile, todayLogged }) {
-  const cyc = currentCyclePhase(profile);
-  const phase = cyc?.phase;
+function QuickActions({ go, accent, profile, todayLogged, phaseNow }) {
+  const phase = phaseNow?.phase;
 
-  // Phase-aware support-person pick: if she has support people configured,
-  // surface one matching the current phase, else pick the first.
   const supportPick = useMemo(() => {
     const people = profile?.support_people || [];
     if (!people.length) return null;
     const lower = (s) => (s || "").toLowerCase();
     const phaseHint = {
-      Menstrual: ["period","cramps","menstrual","pain"],
-      Luteal:    ["pms","anxious","anxiety","mood","sad"],
-      Ovulation: ["energy","social"],
-      Follicular:["plan","motivat"],
+      menstrual: ["period","cramps","menstrual","pain"],
+      luteal:    ["pms","anxious","anxiety","mood","sad"],
+      ovulation: ["energy","social"],
+      follicular:["plan","motivat"],
     }[phase] || [];
     const hit = people.find((p) => phaseHint.some((h) => lower(p.when_to_reach).includes(h)));
     return hit || people[0];
@@ -262,18 +190,20 @@ function QuickActions({ go, accent, profile, todayLogged }) {
 /* ============================================================
    CYCLE SNAPSHOT + OBSERVATIONS — paired panel
    ============================================================ */
-function CycleAndObservations({ profile, entries, accent, go }) {
-  const cyc = currentCyclePhase(profile);
+function CycleAndObservations({ profile, entries, accent, go, phaseNow, wheelData, stats }) {
   const observations = useMemo(() => recentObservations(entries), [entries]);
-  const phaseColor = cyc ? PHASE_COLOR[cyc.phase] || accent : accent;
-
-  // For elder users (post-menopause), the cycle snapshot is not
-  // relevant. Hide the cycle card and let the observations panel
-  // take the full row instead. The cycle math is a non-event for
-  // someone who finished menstruating years ago, and surfacing it
-  // is a small daily reminder of something they may have come to
-  // peace with. Observations + daily read are still meaningful.
+  const phaseColor = phaseNow ? PHASE_COLOR[phaseNow.phase] || accent : accent;
   const isElder = profile?.life_stage === "elder";
+
+  // Only shown if we actually have enough logged history to know an
+  // average cycle length — never a guessed/preset date.
+  const predictedNextPeriod = (wheelData && stats?.avgCycleLength)
+    ? (() => {
+        const d = new Date(wheelData.cycleStart + "T00:00:00");
+        d.setDate(d.getDate() + Math.round(stats.avgCycleLength));
+        return d;
+      })()
+    : null;
 
   return (
     <div style={{
@@ -282,30 +212,20 @@ function CycleAndObservations({ profile, entries, accent, go }) {
     }} className="fb-home-bottom">
       {!isElder && (
       <Card style={{ display: "flex", alignItems: "center", gap: 20 }}>
-        {cyc ? (
+        {phaseNow && wheelData ? (
           <>
-            <MiniCycleWheel profile={profile} size={130}/>
+            <MiniCycleWheel wheelData={wheelData} currentPhase={phaseNow} size={130}/>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 11.5, color: C.inkSoft, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>
                 Your cycle
               </div>
               <div style={{ fontFamily: "Fraunces, serif", fontSize: 19, color: C.ink, lineHeight: 1.25, marginBottom: 6 }}>
-                Day {cyc.dayInCycle} · <span style={{ color: phaseColor }}>{cyc.phase}</span>
+                Day {phaseNow.dayInPhase} · <span style={{ color: phaseColor }}>{PHASE_TITLE[phaseNow.phase]}</span>
               </div>
               <div style={{ fontSize: 13, color: C.inkSoft, lineHeight: 1.5, marginBottom: 10 }}>
-                ~{cyc.daysUntilPeriod} day{cyc.daysUntilPeriod === 1 ? "" : "s"} until your next period.
-              </div>
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px",
-                borderRadius: 99, background: `${phaseColor}14`, color: phaseColor,
-                fontSize: 12, fontWeight: 700, marginBottom: 12,
-              }}>
-                <CalendarHeart size={12}/>
-                Period predicted {(() => {
-                  const d = new Date();
-                  d.setDate(d.getDate() + cyc.daysUntilPeriod);
-                  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-                })()}
+                {predictedNextPeriod
+                  ? <>Period predicted around <b style={{ color: C.ink }}>{predictedNextPeriod.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>, based on your {stats.cyclesObserved} logged cycle{stats.cyclesObserved===1?"":"s"}.</>
+                  : "Log a couple more cycles and we'll estimate your next period from your real average — not a guess."}
               </div>
               <button onClick={() => go("track")} style={{
                 fontSize: 13, fontWeight: 700, padding: "8px 14px",
@@ -321,17 +241,17 @@ function CycleAndObservations({ profile, entries, accent, go }) {
         ) : (
           <div style={{ padding: "10px 4px" }}>
             <div style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: C.ink, marginBottom: 6 }}>
-              Set your cycle date
+              Log your first phase
             </div>
             <div style={{ fontSize: 13, color: C.inkSoft, lineHeight: 1.5, marginBottom: 10 }}>
-              Add your last period's start date in your profile and the rest of FeBrite shapes around it.
+              Tap a day on your Track calendar to log when your period (or another phase) actually started — the rest of FeBrite shapes around it.
             </div>
             <button onClick={() => go("track")} style={{
               fontSize: 13, fontWeight: 600, padding: "8px 14px",
               background: C.clay, color: "#fff", border: "none",
               borderRadius: 10, cursor: "pointer", fontFamily: "Karla, sans-serif",
             }}>
-              Set up
+              Log today
             </button>
           </div>
         )}
@@ -387,21 +307,33 @@ export default function Home({ stage, accent, go }) {
   const { user, profile } = useAuth();
   const [entries, setEntries] = useState([]);
   const [todayLogged, setTodayLogged] = useState(false);
+  const [phaseLogs, setPhaseLogs] = useState([]);
+  const todayDate = useCurrentDate();
 
   useEffect(() => {
     if (!user?.id) return;
     let alive = true;
     (async () => {
       try {
-        const data = await getRecentEntries(user.id, 14);
+        const [data, logged, logs] = await Promise.all([
+          getRecentEntries(user.id, 14),
+          hasCheckedInToday(user.id),
+          getPhaseLogs(user.id, null, null),
+        ]);
         if (!alive) return;
         setEntries(data);
-        const logged = await hasCheckedInToday(user.id);
-        if (alive) setTodayLogged(logged);
+        setTodayLogged(logged);
+        setPhaseLogs(logs);
       } catch (e) { console.error("home load", e); }
     })();
     return () => { alive = false; };
   }, [user?.id]);
+
+  // Single source of truth, derived once, shared by every card below —
+  // nothing on this page can disagree with the Track page again.
+  const phaseNow = useMemo(() => derivePhaseNow(phaseLogs, todayDate), [phaseLogs, todayDate]);
+  const wheelData = useMemo(() => buildCurrentCycleWheelData(phaseLogs, todayDate), [phaseLogs, todayDate]);
+  const stats = useMemo(() => computeCycleStats(phaseLogs), [phaseLogs]);
 
   return (
     <div style={{ paddingBottom: 50 }}>
@@ -419,9 +351,9 @@ export default function Home({ stage, accent, go }) {
         </h1>
       </div>
 
-      <DailyReadCard profile={profile} accent={accent}/>
-      <QuickActions go={go} accent={accent} profile={profile} todayLogged={todayLogged}/>
-      <CycleAndObservations profile={profile} entries={entries} accent={accent} go={go}/>
+      <DailyReadCard profile={profile} accent={accent} phaseNow={phaseNow}/>
+      <QuickActions go={go} accent={accent} profile={profile} todayLogged={todayLogged} phaseNow={phaseNow}/>
+      <CycleAndObservations profile={profile} entries={entries} accent={accent} go={go} phaseNow={phaseNow} wheelData={wheelData} stats={stats}/>
     </div>
   );
 }
