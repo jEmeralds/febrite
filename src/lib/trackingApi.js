@@ -68,7 +68,22 @@ export async function getRecentEntries(userId, days = 28) {
   }
 }
 
-/* ---------- derived ---------- */
+// Quick boolean check — used by Home/DailyNudge to show a nudge if not logged.
+export async function hasCheckedInToday(userId) {
+  try {
+    const { data, error } = await supabase
+      .from("tracking_entries")
+      .select("entry_date")
+      .eq("user_id", userId)
+      .eq("entry_date", todayStr())
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
+  } catch (e) {
+    console.error("hasCheckedInToday failed", e);
+    return false;
+  }
+}
 
 // Builds the last-N-days chart series for the mood/energy area chart.
 // Fills gaps with nulls so recharts draws breaks instead of false zeros.
