@@ -11,7 +11,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
 import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/trackingApi";
-import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData } from "../lib/cyclePhases";
+import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, startPhase } from "../lib/cyclePhases";
 import RealCycleWheel from "../components/RealCycleWheel";
 import { useCurrentDate } from "../lib/useCurrentDate";
 import CycleMonthCalendar from "../components/CycleMonthCalendar";
@@ -216,7 +216,7 @@ function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, lo
           <div style={{ marginTop:22, paddingTop:22, borderTop:`1px solid ${C.line}` }}>
             {showsCycle && (
               <>
-                <Lbl>Cycle phase <span style={{ color:C.inkSoft, fontWeight:400 }}>(only if it feels different from what the calendar shows)</span></Lbl>
+                <Lbl>Cycle phase <span style={{ color:C.inkSoft, fontWeight:400 }}>(this logs it, same as tapping the calendar)</span></Lbl>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   {PHASES.map((p) => (
                     <Chip key={p} active={today.phase===p} onClick={() => set("phase", today.phase===p ? null : p)} accent={accent}>{p}</Chip>
@@ -498,6 +498,8 @@ export default function Tracking({ stage, accent }) {
     setLogged(false);
   };
 
+  const PHASE_TO_ENUM = { Menstrual:"menstrual", Follicular:"follicular", Ovulation:"ovulation", Luteal:"luteal" };
+
   const save = async () => {
     if (!user || saving || today.mood == null) return;
     setSaving(true);
@@ -508,6 +510,14 @@ export default function Tracking({ stage, accent }) {
         return [...others, row].sort((a,b) => a.entry_date.localeCompare(b.entry_date));
       });
       setLogged(true);
+      // The check-in's phase chip is another way of saying "log this phase" —
+      // it should count the same as tapping the calendar, not silently write
+      // to a different place. "N/A" or no selection means nothing to log.
+      const enumPhase = PHASE_TO_ENUM[today.phase];
+      if (enumPhase) {
+        await startPhase(user.id, enumPhase, todayDate);
+        reloadPhaseData();
+      }
     } catch (e) { console.error("save", e); }
     finally { setSaving(false); }
   };
