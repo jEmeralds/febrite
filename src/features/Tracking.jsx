@@ -11,7 +11,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
 import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/trackingApi";
-import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, startPhase } from "../lib/cyclePhases";
+import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, logPhaseForToday } from "../lib/cyclePhases";
 import RealCycleWheel from "../components/RealCycleWheel";
 import { useCurrentDate } from "../lib/useCurrentDate";
 import CycleMonthCalendar from "../components/CycleMonthCalendar";
@@ -515,7 +515,7 @@ export default function Tracking({ stage, accent }) {
       // to a different place. "N/A" or no selection means nothing to log.
       const enumPhase = PHASE_TO_ENUM[today.phase];
       if (enumPhase) {
-        await startPhase(user.id, enumPhase, todayDate);
+        await logPhaseForToday(user.id, enumPhase, todayDate);
         reloadPhaseData();
       }
     } catch (e) { console.error("save", e); }

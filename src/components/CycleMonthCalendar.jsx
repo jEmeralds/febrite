@@ -34,9 +34,14 @@ function buildMonthGrid(monthDate) {
   return cells;
 }
 
-// Which phase (if any) covers a given date, from the real logs.
-function phaseForDate(logs, dateStr) {
-  const log = logs.find((l) => l.start_date <= dateStr && (!l.end_date || l.end_date >= dateStr));
+// Which phase (if any) covers a given date, from the real logs. An
+// open-ended log (still ongoing, no end_date) only covers up through
+// TODAY — it must never be treated as covering future days that haven't
+// happened yet, no matter how far the log's start_date is in the past.
+function phaseForDate(logs, dateStr, todayStr) {
+  const log = logs.find((l) =>
+    l.start_date <= dateStr && (l.end_date ? l.end_date >= dateStr : dateStr <= todayStr)
+  );
   return log || null;
 }
 
@@ -58,7 +63,7 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged, to
   // Otherwise open the phase picker immediately for that single day — the
   // person can widen it to a range right there in the picker, no drag needed.
   const handleDayClick = (dateStr) => {
-    const existing = phaseForDate(logs, dateStr);
+    const existing = phaseForDate(logs, dateStr, todayStr);
     if (existing) { setDayInfo({ dateStr, log: existing }); return; }
     setPickerFor({ start: dateStr, end: dateStr });
   };
@@ -119,7 +124,7 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged, to
         {cells.map((date, i) => {
           if (!date) return <div key={i} />;
           const dateStr = iso(date);
-          const log = phaseForDate(logs, dateStr);
+          const log = phaseForDate(logs, dateStr, todayStr);
           const color = log ? PHASE_COLOR[log.phase] : null;
           const isToday = dateStr === todayStr;
           return (

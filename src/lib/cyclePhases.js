@@ -236,6 +236,51 @@ function nextDay(dateStr) {
 
 export { PHASES };
 
+// Used by the check-in's phase chip. Unlike startPhase (which always opens
+// a fresh log), this recognizes when today is simply a continuation of an
+// already-logged streak of the SAME phase and extends it — so logging
+// "Follicular" today after already logging Follicular yesterday reads as
+// day N of one streak, not day 1 of a new fragment.
+export async function logPhaseForToday(userId, phase, dateStr) {
+  try {
+    const logs = await getPhaseLogs(userId, null, null);
+    const covering = logs.find((l) => l.start_date <= dateStr && (!l.end_date || l.end_date >= dateStr));
+    if (covering) {
+      if (covering.phase === phase) return covering; // already correctly logged today
+      return await logPhaseRange(userId, phase, dateStr, dateStr); // different phase covers today — replace just today
+    }
+
+    const dayBefore = (() => {
+      const d = new Date(dateStr + "T00:00:00");
+      d.setDate(d.getDate() - 1);
+      return todayStr(d);
+    })();
+
+    // Same-phase log ending exactly yesterday — reopen it to include today.
+    const adjacent = logs.find((l) => l.phase === phase && l.end_date === dayBefore);
+    if (adjacent) {
+      return await editPhaseLog(adjacent.id, { end_date: null });
+    }
+
+    // A different phase is still open — close it out before starting fresh.
+    const open = logs.find((l) => !l.end_date);
+    if (open && open.phase !== phase) {
+      await endPhase(open.id, open.start_date <= dayBefore ? dayBefore : open.start_date);
+    }
+
+    const { data, error } = await supabase
+      .from("cycle_phase_logs")
+      .insert({ user_id: userId, phase, start_date: dateStr, end_date: null })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error("logPhaseForToday failed", e);
+    throw e;
+  }
+}
+
 // Sync version of currentPhase() for callers that already have the full
 // logs array loaded (e.g. Home.jsx, which fetches once and derives
 // everything from the same list — keeping every card on the page in
