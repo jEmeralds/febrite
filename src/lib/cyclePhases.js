@@ -235,3 +235,43 @@ function nextDay(dateStr) {
 }
 
 export { PHASES };
+
+/* ---------- current-cycle wheel data (real segments, no fixed math) ---------- */
+
+// Builds the shape of THIS cycle so far, purely from what's been logged.
+// Finds the most recent menstrual start on/before today, then walks every
+// log from there forward. Gaps between logs (days nothing was recorded)
+// are represented honestly as "unlogged" segments rather than silently
+// compressed away or guessed at — the wheel should never claim to know
+// something that wasn't actually logged.
+export function buildCurrentCycleWheelData(logs, todayStr) {
+  const sorted = [...logs].sort((a, b) => a.start_date.localeCompare(b.start_date));
+  const menstrualStarts = sorted.filter((l) => l.phase === "menstrual").map((l) => l.start_date);
+  const cycleStart = [...menstrualStarts].reverse().find((d) => d <= todayStr);
+  if (!cycleStart) return null;
+
+  const dayIndex = (dateStr) =>
+    Math.round((new Date(dateStr + "T00:00:00") - new Date(cycleStart + "T00:00:00")) / 86400000) + 1;
+  const totalDays = dayIndex(todayStr);
+  if (totalDays < 1) return null;
+
+  const relevant = sorted.filter((l) => l.start_date >= cycleStart && l.start_date <= todayStr);
+
+  const segments = [];
+  let cursor = 1;
+  for (const log of relevant) {
+    const segStart = dayIndex(log.start_date);
+    if (segStart > cursor) {
+      segments.push({ phase: null, startDay: cursor, endDay: segStart - 1 }); // unlogged gap
+    }
+    const rawEnd = log.end_date ? dayIndex(log.end_date) : totalDays;
+    const segEnd = Math.min(Math.max(rawEnd, segStart), totalDays);
+    segments.push({ phase: log.phase, startDay: Math.max(segStart, cursor), endDay: segEnd, logId: log.id });
+    cursor = segEnd + 1;
+  }
+  if (cursor <= totalDays) {
+    segments.push({ phase: null, startDay: cursor, endDay: totalDays });
+  }
+
+  return { cycleStart, totalDays, segments };
+}

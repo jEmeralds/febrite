@@ -10,8 +10,9 @@ import {
 } from "recharts";
 import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
-import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/trackingApi";
-import { currentPhase, getPhaseLogs, computeCycleStats } from "../lib/cyclePhases";
+import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/tracking";
+import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData } from "../lib/cyclePhases";
+import RealCycleWheel from "../components/RealCycleWheel";
 import { useCurrentDate } from "../lib/useCurrentDate";
 import CycleMonthCalendar from "../components/CycleMonthCalendar";
 import ReportsPanel from "./track/ReportsPanel";
@@ -121,7 +122,7 @@ function weeklyStreak(entries) {
   return count;
 }
 
-function TrackHero({ entries, accent, todayLogged, phaseNow, stats }) {
+function TrackHero({ entries, accent, todayLogged, phaseNow, stats, wheelData }) {
   const phaseColor = phaseNow ? (PHASE_COLOR[PHASE_TITLE[phaseNow.phase]] || accent) : accent;
   const streak     = useMemo(() => weeklyStreak(entries), [entries]);
 
@@ -137,7 +138,9 @@ function TrackHero({ entries, accent, todayLogged, phaseNow, stats }) {
     <Card style={{ marginBottom:22, padding:"32px 28px", background:phaseNow?`radial-gradient(120% 80% at 18% 50%, ${phaseColor}18, ${C.card} 65%)`:C.card, position:"relative", overflow:"hidden" }}>
       <div className="fb-track-hero-grid" style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:36, alignItems:"center" }}>
         <div style={{ display:"grid", placeItems:"center" }}>
-          <PhaseStatusCard phaseNow={phaseNow} stats={stats} accent={accent} />
+          {wheelData
+            ? <RealCycleWheel wheelData={wheelData} currentPhase={phaseNow} accent={accent} />
+            : <PhaseStatusCard phaseNow={phaseNow} stats={stats} accent={accent} />}
         </div>
         <div>
           <div style={{ fontSize:12, color:C.inkSoft, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", marginBottom:8 }}>
@@ -436,6 +439,7 @@ export default function Tracking({ stage, accent }) {
   const todayDate  = useCurrentDate();
 
   const stats = useMemo(() => computeCycleStats(phaseLogs), [phaseLogs]);
+  const wheelData = useMemo(() => buildCurrentCycleWheelData(phaseLogs, todayDate), [phaseLogs, todayDate]);
 
   const reloadPhaseData = useCallback(async () => {
     if (!user) return;
@@ -510,7 +514,7 @@ export default function Tracking({ stage, accent }) {
 
   return (
     <div style={{ paddingBottom:60 }}>
-      <TrackHero entries={entries} accent={accent} todayLogged={logged} phaseNow={phaseNow} stats={stats}/>
+      <TrackHero entries={entries} accent={accent} todayLogged={logged} phaseNow={phaseNow} stats={stats} wheelData={wheelData}/>
       <div className="fb-track-mid" style={{ display:"grid", gap:18, gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)" }}>
         <div>
           <CheckInPanel today={today} set={set} toggleSymptom={toggleSymptom} setSeverity={setSeverity} save={save} saving={saving} logged={logged} accent={accent} showsCycle={showsCycle}/>
