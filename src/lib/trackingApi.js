@@ -7,7 +7,10 @@ import { supabase } from "./supabase";
    the page component that imports these functions, causing a self-import.
 ============================================================================= */
 
-const todayStr = (d = new Date()) => d.toISOString().slice(0, 10);
+// Local Y-M-D string â€” NOT toISOString(), which converts to UTC first and
+// silently shifts the date by a day for anyone east of UTC (e.g. Doha, UTC+3).
+const todayStr = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /* ---------- save (upsert) ---------- */
 
@@ -88,22 +91,4 @@ export function buildChartData(entries, days = 14) {
     });
   }
   return out;
-}
-
-// Quick boolean check — used by Home/DailyNudge to show a nudge if not logged.
-export async function hasCheckedInToday(userId) {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  try {
-    const { data, error } = await supabase
-      .from("tracking_entries")
-      .select("entry_date")
-      .eq("user_id", userId)
-      .eq("entry_date", todayStr)
-      .maybeSingle();
-    if (error) throw error;
-    return !!data;
-  } catch (e) {
-    console.error("hasCheckedInToday failed", e);
-    return false;
-  }
 }

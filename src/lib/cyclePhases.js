@@ -14,7 +14,10 @@ import { supabase } from "./supabase";
 ============================================================================= */
 
 const PHASES = ["menstrual", "follicular", "ovulation", "luteal"];
-const todayStr = (d = new Date()) => d.toISOString().slice(0, 10);
+// Local Y-M-D string — NOT toISOString(), which converts to UTC first and
+// silently shifts the date by a day for anyone east of UTC (e.g. Doha, UTC+3).
+const todayStr = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /* ---------- reads ---------- */
 

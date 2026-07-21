@@ -13,7 +13,10 @@ const PHASE_LABEL = {
   menstrual: "Menstrual", follicular: "Follicular", ovulation: "Ovulation", luteal: "Luteal",
 };
 
-const iso = (d) => d.toISOString().slice(0, 10);
+// Local Y-M-D string — NOT toISOString(), which converts to UTC first and
+// silently shifts the date by a day for anyone east of UTC (e.g. Doha, UTC+3).
+const iso = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
 const daysInMonth = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
