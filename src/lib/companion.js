@@ -1,17 +1,39 @@
 import { getRecentEntries } from "./trackingApi";
 import { currentCyclePhase } from "./cycleMath";
+import { getPhaseLogs, derivePhaseNow } from "./cyclePhases";
 
 const API = import.meta.env.VITE_API_URL;
 const TODAY_CACHE_KEY = "febrite_daily_read";
+
+const PHASE_TITLE = { menstrual:"Menstrual", follicular:"Follicular", ovulation:"Ovulation", luteal:"Luteal" };
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+
+/* Real, logged-phase summary sent to the server — replaces the old
+   server-side fixed-math cyclePhaseSummary(profile). This is computed
+   from her actual cycle_phase_logs, same source of truth as the Track
+   page and the wheel, so the AI's context can never disagree with what
+   she sees in the app. Returns null if nothing's been logged yet. */
+async function buildPhaseSummary(userId) {
+  if (!userId) return null;
+  try {
+    const logs = await getPhaseLogs(userId, null, null);
+    const now = derivePhaseNow(logs, localToday());
+    if (!now) return null;
+    return `Currently in her ${PHASE_TITLE[now.phase]} phase — day ${now.dayInPhase}, as logged by her (not a prediction).`;
+  } catch (e) {
+    console.error("buildPhaseSummary failed", e);
+    return null;
+  }
+}
 
 /* Fetch the daily read for Home. Cached per user per day, AND
    invalidated when she logs a new check-in (so the paragraph
    updates if she logs mid-day and comes back to Home). */
 export async function fetchDailyRead({ profile, userId, force = false }) {
-  // Local-time date (not UTC) so the cache rolls over at the user's
-  // midnight, not GMT midnight.
-  const d = new Date();
-  const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const today = localToday();
   let entries = [];
   if (userId) {
     try { entries = await getRecentEntries(userId, 14); } catch {}
@@ -35,11 +57,13 @@ export async function fetchDailyRead({ profile, userId, force = false }) {
     return { text: "Welcome back. Your companion will write you a fresh read each day once we connect the backend.", configured: false };
   }
 
+  const current_phase_summary = await buildPhaseSummary(userId);
+
   try {
     const r = await fetch(`${API}/api/companion/today`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profile, recent_entries: entries, support_people: profile?.support_people || [] }),
+      body: JSON.stringify({ profile, recent_entries: entries, support_people: profile?.support_people || [], current_phase_summary }),
     });
     if (!r.ok) throw new Error("bad status " + r.status);
     const data = await r.json();
@@ -56,8 +80,7 @@ export async function fetchDailyRead({ profile, userId, force = false }) {
 /* Ask the companion. Pulls the user's latest tracking entries and bundles
    them with profile + support_people into the request, so the answer is
    shaped by who she actually is. The `domain` arg lets callers tell
-   the server which professional lens to answer through (e.g. nutrition
-   answers from a nutritionist's voice, not a generic wellness paragraph). */
+   the server which professional lens to answer through. */
 export async function askCompanion({ question, profile, userId, domain = null }) {
   let recent_entries = [];
   if (userId) {
@@ -65,6 +88,7 @@ export async function askCompanion({ question, profile, userId, domain = null })
     catch (e) { console.error("entries fetch", e); }
   }
   const support_people = profile?.support_people || [];
+  const current_phase_summary = await buildPhaseSummary(userId);
 
   if (!API) {
     return {
@@ -77,7 +101,7 @@ export async function askCompanion({ question, profile, userId, domain = null })
     const r = await fetch(`${API}/api/companion/ask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, profile, recent_entries, support_people, domain }),
+      body: JSON.stringify({ question, profile, recent_entries, support_people, domain, current_phase_summary }),
     });
     if (!r.ok) throw new Error("bad status " + r.status);
     return await r.json();
@@ -87,15 +111,39 @@ export async function askCompanion({ question, profile, userId, domain = null })
   }
 }
 
+/* NEW: natural-language check-in parsing. Takes her free text and returns
+   structured suggestions — mood/energy/symptoms/phase/etc — for the
+   check-in form to pre-fill. NEVER auto-saves; the caller always shows
+   these back to her to confirm or adjust before anything is written. */
+export async function parseCheckinText({ text, userId }) {
+  if (!API) {
+    return { error: "not_configured", text: "The companion isn't connected yet, so I can't interpret free text — you can still fill in the fields directly." };
+  }
+  const current_phase_summary = await buildPhaseSummary(userId);
+  try {
+    const r = await fetch(`${API}/api/companion/parse-checkin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, current_phase_summary }),
+    });
+    if (!r.ok) throw new Error("bad status " + r.status);
+    return await r.json();
+  } catch (e) {
+    console.error("parse-checkin failed", e);
+    return { error: true, text: "Couldn't reach the companion just now to interpret that — try again in a moment, or fill in the fields directly." };
+  }
+}
+
 // ============================================================================
 // SUGGESTED QUESTIONS
-// Personal data is king: if we see her recent state or her profile saying
-// something specific, we ask about THAT. Generic questions fill the remaining
-// slots only when personal signal is thin.
+// (unchanged from before — still reads currentCyclePhase(profile) from the
+// old cycleMath.js for its phase-aware question prompts. This is a known
+// follow-up: migrating it to real logged phases needs the caller to pass
+// an already-computed phaseNow in, since this function is called
+// synchronously. Left as-is for now to avoid guessing at Companion.jsx's
+// current structure blind.)
 // ============================================================================
 
-/* DOMAIN × STAGE matrix — only used as fallback when personal questions
-   don't fill the 6 slots, or for users with no data yet. */
 const DOMAIN_STAGE = {
   gynae: {
     teen:  ["Is my period supposed to be this irregular?", "When should I see a gynaecologist for the first time?", "How do I know if my cramps are too much?"],
@@ -156,16 +204,11 @@ const STAGE_FALLBACK = {
   elder: "What should I be doing for bone health now?",
 };
 
-/* Build the list of PERSONAL, data-driven questions. Each is tagged
-   with the domains it belongs to — so when a topic chip is active,
-   we surface only the personal questions actually relevant to that
-   lens. Returns objects {text, domains}. */
 function personalQuestions(profile, entries) {
   const out = [];
   const push = (text, ...domains) => out.push({ text, domains });
   const real = entries.filter((e) => e.mood != null).slice(-3);
 
-  // ---- Recent pattern signals ----
   const sleeps = real.filter((e) => e.sleep_hours != null);
   if (sleeps.length >= 2 && sleeps.every((e) => e.sleep_hours < 6.5))
     push("My sleep has been short for a few nights — what's likely going on?", "medical", "psychiatry", "life");
@@ -185,14 +228,12 @@ function personalQuestions(profile, entries) {
   if (energies.length >= 2 && energies.every((e) => e.energy <= 2))
     push("Why has my energy been so low this week?", "medical", "nutrition", "fitness");
 
-  // Trend direction (mood)
   if (real.length >= 3) {
     const first = real[0].mood, last = real[real.length - 1].mood;
     if (last > first + 0.8) push("My mood has been lifting — what's likely driving that?", "psychology", "psychiatry");
     if (first > last + 0.8) push("My mood has been declining over the past few days — should I be paying attention?", "psychiatry", "psychology");
   }
 
-  // ---- Recurring symptoms in recent entries ----
   const symptomCounts = {};
   entries.forEach((e) => (e.symptoms || []).forEach((s) => {
     const k = s.toLowerCase();
@@ -211,7 +252,6 @@ function personalQuestions(profile, entries) {
   if (recurring("breast"))     push("My breasts have been tender lately — when is that worth checking?", "gynae", "medical");
   if (recurring("nausea"))     push("Why has nausea been showing up for me?", "gynae", "medical");
 
-  // ---- Current cycle phase (computed from cycle data, NOT last-logged) ----
   const cyc = currentCyclePhase(profile);
   const phase = cyc?.phase;
   if (phase === "Luteal") {
@@ -234,7 +274,6 @@ function personalQuestions(profile, entries) {
     push("What foods support me in my follicular phase?", "nutrition");
   }
 
-  // ---- Conditions (from profile) ----
   const conds = (profile?.conditions || []).map((c) => c.toLowerCase());
   conds.forEach((c) => {
     if (c.includes("pcos")) {
@@ -257,7 +296,6 @@ function personalQuestions(profile, entries) {
     if (c.includes("migraine"))  push("Why are my migraines tied to my cycle, and what helps?", "gynae", "medical");
   });
 
-  // ---- Goals (from profile) ----
   const goals = (profile?.goals || []).map((g) => g.toLowerCase());
   goals.forEach((g) => {
     if (g.includes("sleep"))   push("What actually improves my sleep quality, not just how long I sleep?", "medical", "life");
@@ -268,7 +306,6 @@ function personalQuestions(profile, entries) {
     if (g.includes("strength") || g.includes("fitness")) push("How should I structure workouts around my cycle?", "fitness");
   });
 
-  // ---- Focus areas (her stated focuses) ----
   const focuses = (profile?.focus_areas || []).map((f) => f.toLowerCase());
   focuses.forEach((f) => {
     if (f.includes("cycle") && f.includes("mood")) push("How is my cycle actually connected to my mood?", "gynae", "psychology");
@@ -277,7 +314,6 @@ function personalQuestions(profile, entries) {
     if (f.includes("perimenopause") || f.includes("menopause")) push("How do I tell what's hormones vs what's just life right now?", "gynae", "life");
   });
 
-  // ---- Medications mentioned ----
   if (profile?.medications?.length) {
     push("How might my current medications be affecting my cycle or mood?", "medical", "gynae");
   }
@@ -285,7 +321,6 @@ function personalQuestions(profile, entries) {
   return out;
 }
 
-/* Generic fallback questions (domain × stage, then stage, then catch-all). */
 function genericQuestions(profile, domain) {
   const out = [];
   const stage = profile?.life_stage;
@@ -293,7 +328,6 @@ function genericQuestions(profile, domain) {
   if (domain && stage && DOMAIN_STAGE[domain]?.[stage]) {
     out.push(...DOMAIN_STAGE[domain][stage]);
   } else if (domain && stage) {
-    // Domain known, stage not — pick young as default since most users
     Object.values(DOMAIN_STAGE[domain] || {}).slice(0, 1).forEach((arr) => out.push(...arr));
   }
 
@@ -304,21 +338,6 @@ function genericQuestions(profile, domain) {
   return out;
 }
 
-/* Top-level question picker.
-
-   The active topic chip changes BOTH which personal questions appear
-   AND which generic domain questions appear, so the chip is a real
-   re-scope of the experience — not just a color swap.
-
-   When `domain` is set:
-   - Personal questions are filtered to ones tagged with this domain
-   - We reserve up to 3 slots for generic domain questions so the chip
-     never collapses into purely personal output (i.e. the chip always
-     shows the lens is active even when personal data is rich).
-
-   When `domain` is null ("All"):
-   - All personal questions are eligible
-   - Generic catch-alls fill any remaining slots */
 export function suggestedQuestions(profile, recent_entries = [], domain = null) {
   const personalObjs = personalQuestions(profile || {}, recent_entries || []);
   const filteredPersonal = domain
@@ -337,7 +356,6 @@ export function suggestedQuestions(profile, recent_entries = [], domain = null) 
 
   const TOTAL = 6;
   if (domain) {
-    // Reserve 3 slots for generic domain questions, fill the rest with personal
     const personalSlots = Math.max(3, TOTAL - 3);
     let personalAdded = 0;
     for (const q of filteredPersonal) {
@@ -346,7 +364,6 @@ export function suggestedQuestions(profile, recent_entries = [], domain = null) 
     }
     for (const q of generic) { if (out.length >= TOTAL) break; tryAdd(q); }
   } else {
-    // No active domain — personal first, generic fills
     for (const q of filteredPersonal) { if (out.length >= TOTAL) break; tryAdd(q.text); }
     for (const q of generic)          { if (out.length >= TOTAL) break; tryAdd(q); }
   }

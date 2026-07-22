@@ -10,7 +10,8 @@ import {
 } from "recharts";
 import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
-import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/trackingApi";
+import { saveTodayEntry, getRecentEntries, getEntryForDate, buildChartData } from "../lib/trackingApi";
+import { parseCheckinText } from "../lib/companion";
 import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, logPhaseForToday } from "../lib/cyclePhases";
 import RealCycleWheel from "../components/RealCycleWheel";
 import { useCurrentDate } from "../lib/useCurrentDate";
@@ -179,16 +180,63 @@ function TrackHero({ entries, accent, todayLogged, phaseNow, stats, wheelData })
 }
 
 /* ── Check-in panel ───────────────────────────────────────── */
-function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, logged, accent, showsCycle }) {
+function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, logged, accent, showsCycle, checkinDate, todayDate, manualDate, setManualDate, setCheckinDate, backToToday, interpretNote, interpreting }) {
   const [expanded, setExpanded] = useState(false);
   const canSave = today.mood != null;
   const isMenstrual = today.phase === "Menstrual";
+  const isToday = checkinDate === todayDate;
 
   return (
     <div>
-      <div style={{ fontSize:12, color:C.inkSoft, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:6 }}>Today's check-in</div>
-      <h2 style={{ fontFamily:"Fraunces,serif", fontWeight:400, fontSize:"clamp(22px,3.5vw,28px)", margin:"0 0 6px", color:C.ink, letterSpacing:"-.01em" }}>How are you, today?</h2>
-      <p style={{ fontSize:14.5, color:C.inkSoft, lineHeight:1.55, margin:"0 0 18px" }}>The three essentials below take 30 seconds. Add more when you want a deeper read.</p>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom:6 }}>
+        <div style={{ fontSize:12, color:C.inkSoft, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase" }}>
+          {isToday ? "Today's check-in" : `Check-in for ${checkinDate}`}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <input
+            type="date"
+            value={checkinDate}
+            max={todayDate}
+            onChange={(e) => { if (!e.target.value) return; setManualDate(true); setCheckinDate(e.target.value); }}
+            style={{ fontSize:12.5, padding:"6px 8px", borderRadius:8, border:`1px solid ${C.line}`, background:"#fff", color:C.ink, fontFamily:"Karla,sans-serif" }}
+          />
+          {!isToday && (
+            <button onClick={backToToday} style={{ fontSize:12, color:accent, background:"none", border:"none", cursor:"pointer", fontWeight:600, textDecoration:"underline" }}>
+              Back to today
+            </button>
+          )}
+        </div>
+      </div>
+      <h2 style={{ fontFamily:"Fraunces,serif", fontWeight:400, fontSize:"clamp(22px,3.5vw,28px)", margin:"0 0 6px", color:C.ink, letterSpacing:"-.01em" }}>
+        {isToday ? "How are you, today?" : "How were you, that day?"}
+      </h2>
+      <p style={{ fontSize:14.5, color:C.inkSoft, lineHeight:1.55, margin:"0 0 18px" }}>
+        {isToday
+          ? "The three essentials below take 30 seconds. Add more when you want a deeper read."
+          : "Didn't log this day at the time? That's fine — log it now, as best you remember."}
+      </p>
+
+      <Card style={{ padding:22, marginBottom:16 }}>
+        <Lbl>In your own words <span style={{ color:C.inkSoft, fontWeight:400 }}>(optional — describe anything that's not in the list below)</span></Lbl>
+        <textarea
+          value={today.note}
+          onChange={(e) => set("note", e.target.value)}
+          placeholder="e.g. Rough week, barely slept, lower back's been sore, and I've been snapping at people more than usual…"
+          rows={3}
+          style={{ width:"100%", padding:"10px 12px", borderRadius:10, border:`1px solid ${C.line}`, fontFamily:"Karla,sans-serif", fontSize:13.5, color:C.ink, resize:"vertical", boxSizing:"border-box" }}
+        />
+        <button onClick={interpretNote} disabled={!today.note?.trim() || interpreting} style={{
+          marginTop:10, padding:"9px 14px", borderRadius:10, border:"none",
+          background: today.note?.trim() ? accent : "rgba(44,35,32,.15)", color:"#fff",
+          fontSize:13, fontWeight:700, cursor: today.note?.trim() && !interpreting ? "pointer" : "not-allowed",
+          fontFamily:"Karla,sans-serif", display:"inline-flex", alignItems:"center", gap:7,
+        }}>
+          <Sparkles size={14}/> {interpreting ? "Reading that…" : "Let AI suggest the fields below"}
+        </button>
+        <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:8, lineHeight:1.5 }}>
+          This only pre-fills suggestions — nothing saves until you tap Save below, and you can adjust anything first.
+        </div>
+      </Card>
 
       <Card style={{ padding:22 }}>
         <Lbl>Mood</Lbl>
@@ -196,6 +244,7 @@ function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, lo
 
         <Lbl top>Energy</Lbl>
         <EmojiRow items={ENERGY} value={today.energy} onPick={(v) => set("energy",v)} accent={accent}/>
+
 
         <Lbl top>Sleep last night · <b style={{ color:C.ink }}>{today.sleep}h</b></Lbl>
         <Stepper
@@ -292,7 +341,7 @@ function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, lo
         )}
 
         <button onClick={save} disabled={!canSave||saving} style={{ marginTop:22, width:"100%", padding:"13px", borderRadius:12, border:"none", background:canSave?accent:"rgba(44,35,32,.15)", color:"#fff", fontSize:15, fontWeight:700, cursor:canSave&&!saving?"pointer":"not-allowed", display:"flex", justifyContent:"center", alignItems:"center", gap:8, opacity:saving?.7:1, fontFamily:"Karla,sans-serif" }}>
-          {saving ? "Saving…" : logged ? <><CheckCircle2 size={16}/> Logged for today · update</> : <><CalendarHeart size={16}/> Save check-in</>}
+          {saving ? "Saving…" : logged ? <><CheckCircle2 size={16}/> {isToday ? "Logged for today" : `Logged for ${checkinDate}`} · update</> : <><CalendarHeart size={16}/> Save check-in</>}
         </button>
       </Card>
       <style>{`@media(max-width:540px){.fb-stress-grid,.fb-water-grid{grid-template-columns:1fr!important;}}`}</style>
@@ -428,15 +477,24 @@ export default function Tracking({ stage, accent }) {
   const [today, setToday] = useState({
     mood:null, sleep:7, water:4, moved:false, energy:null,
     workStress:null, personalStress:null, phase:null, symptoms:[],
-    flowIntensity:null, symptomSeverity:{},
+    flowIntensity:null, symptomSeverity:{}, note:"",
   });
   const [logged,  setLogged]  = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [entries, setEntries] = useState([]);
   const [phaseLogs, setPhaseLogs] = useState([]);
   const [phaseNow, setPhaseNow] = useState(null);
+  const [interpreting, setInterpreting] = useState(false);
   const showsCycle = !["elder"].includes(stage);
   const todayDate  = useCurrentDate();
+  // The date this check-in form is currently editing. Defaults to today,
+  // but "Log a different day" can point it at any past date — the whole
+  // form (load + save) follows this instead of always being locked to today.
+  const [checkinDate, setCheckinDate] = useState(todayDate);
+  // Keep checkinDate following today's real date UNLESS the person has
+  // manually picked a different day to edit.
+  const [manualDate, setManualDate] = useState(false);
+  useEffect(() => { if (!manualDate) setCheckinDate(todayDate); }, [todayDate, manualDate]);
 
   const stats = useMemo(() => computeCycleStats(phaseLogs), [phaseLogs]);
   const wheelData = useMemo(() => buildCurrentCycleWheelData(phaseLogs, todayDate), [phaseLogs, todayDate]);
@@ -456,32 +514,45 @@ export default function Tracking({ stage, accent }) {
     (async () => {
       try {
         const data = await getRecentEntries(user.id, 28);
-        if (!active) return;
-        setEntries(data);
-        const row = data.find((e) => e.entry_date === todayDate);
-        if (row) {
-          setToday({
-            mood:           row.mood,
-            sleep:          row.sleep_hours       ?? 7,
-            water:          row.water_glasses      ?? 4,
-            moved:          !!row.moved,
-            energy:         row.energy,
-            workStress:     row.work_stress,
-            personalStress: row.personal_stress,
-            phase:          row.cycle_phase        || null,
-            symptoms:       row.symptoms           || [],
-            flowIntensity:  row.flow_intensity     || null,
-            symptomSeverity:row.symptom_severity   || {},
-          });
-          setLogged(true);
-        } else {
-          setToday({ mood:null, sleep:7, water:4, moved:false, energy:null, workStress:null, personalStress:null, phase:null, symptoms:[], flowIntensity:null, symptomSeverity:{} });
-          setLogged(false);
-        }
+        if (active) setEntries(data);
       } catch (e) { console.error("load entries", e); }
     })();
     return () => { active = false; };
   }, [user, todayDate]);
+
+  useEffect(() => {
+    if (!user || !checkinDate) return;
+    let active = true;
+    (async () => {
+      // Prefer the already-loaded 28-day cache (covers today and the recent
+      // past); fall back to a direct fetch for dates further back (e.g.
+      // "log last month").
+      const cached = entries.find((e) => e.entry_date === checkinDate);
+      const row = cached || await getEntryForDate(user.id, checkinDate);
+      if (!active) return;
+      if (row) {
+        setToday({
+          mood:           row.mood,
+          sleep:          row.sleep_hours       ?? 7,
+          water:          row.water_glasses      ?? 4,
+          moved:          !!row.moved,
+          energy:         row.energy,
+          workStress:     row.work_stress,
+          personalStress: row.personal_stress,
+          phase:          row.cycle_phase        || null,
+          symptoms:       row.symptoms           || [],
+          flowIntensity:  row.flow_intensity     || null,
+          symptomSeverity:row.symptom_severity   || {},
+          note:           row.note               || "",
+        });
+        setLogged(true);
+      } else {
+        setToday({ mood:null, sleep:7, water:4, moved:false, energy:null, workStress:null, personalStress:null, phase:null, symptoms:[], flowIntensity:null, symptomSeverity:{}, note:"" });
+        setLogged(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [user, checkinDate, entries]);
 
   const chartData = useMemo(() => buildChartData(entries.slice(-14), 14), [entries]);
   const realDays  = entries.filter((e) => e.mood != null).length;
@@ -504,7 +575,7 @@ export default function Tracking({ stage, accent }) {
     if (!user || saving || today.mood == null) return;
     setSaving(true);
     try {
-      const row = await saveTodayEntry(user.id, today);
+      const row = await saveTodayEntry(user.id, today, checkinDate);
       setEntries((prev) => {
         const others = prev.filter((e) => e.entry_date !== row.entry_date);
         return [...others, row].sort((a,b) => a.entry_date.localeCompare(b.entry_date));
@@ -515,11 +586,47 @@ export default function Tracking({ stage, accent }) {
       // to a different place. "N/A" or no selection means nothing to log.
       const enumPhase = PHASE_TO_ENUM[today.phase];
       if (enumPhase) {
-        await logPhaseForToday(user.id, enumPhase, todayDate);
+        await logPhaseForToday(user.id, enumPhase, checkinDate);
         reloadPhaseData();
       }
     } catch (e) { console.error("save", e); }
     finally { setSaving(false); }
+  };
+
+  const backToToday = () => { setManualDate(false); setCheckinDate(todayDate); };
+
+  // Natural-language interpretation: send her free text to the companion,
+  // pre-fill whatever it could confidently extract. Nothing is saved here —
+  // she still reviews the (now pre-filled) form and taps Save herself.
+  const interpretNote = async () => {
+    if (!today.note?.trim() || interpreting) return;
+    setInterpreting(true);
+    try {
+      const result = await parseCheckinText({ text: today.note, userId: user?.id });
+      setToday((t) => {
+        const next = { ...t };
+        if (result.mood != null)   next.mood = result.mood;
+        if (result.energy != null) next.energy = result.energy;
+        if (result.sleep_hours != null) next.sleep = result.sleep_hours;
+        if (result.work_stress != null) next.workStress = result.work_stress;
+        if (result.personal_stress != null) next.personalStress = result.personal_stress;
+        if (result.phase) {
+          const titleCase = result.phase.charAt(0).toUpperCase() + result.phase.slice(1);
+          next.phase = titleCase;
+        }
+        if (Array.isArray(result.symptoms) && result.symptoms.length) {
+          next.symptoms = Array.from(new Set([...(t.symptoms || []), ...result.symptoms]));
+        }
+        if (Array.isArray(result.extra_symptoms) && result.extra_symptoms.length) {
+          // Freeform symptoms with no matching preset chip — fold into the
+          // note itself so nothing she said gets silently dropped.
+          next.note = `${t.note}${t.note.endsWith(".") || t.note.endsWith("\n") ? "" : "."} (Also: ${result.extra_symptoms.join(", ")})`;
+        }
+        setLogged(false);
+        return next;
+      });
+    } catch (e) { console.error("interpretNote", e); }
+    finally { setInterpreting(false); }
   };
 
   return (
@@ -527,7 +634,7 @@ export default function Tracking({ stage, accent }) {
       <TrackHero entries={entries} accent={accent} todayLogged={logged} phaseNow={phaseNow} stats={stats} wheelData={wheelData}/>
       <div className="fb-track-mid" style={{ display:"grid", gap:18, gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)" }}>
         <div>
-          <CheckInPanel today={today} set={set} toggleSymptom={toggleSymptom} setSeverity={setSeverity} save={save} saving={saving} logged={logged} accent={accent} showsCycle={showsCycle}/>
+          <CheckInPanel today={today} set={set} toggleSymptom={toggleSymptom} setSeverity={setSeverity} save={save} saving={saving} logged={logged} accent={accent} showsCycle={showsCycle} checkinDate={checkinDate} todayDate={todayDate} manualDate={manualDate} setManualDate={setManualDate} setCheckinDate={setCheckinDate} backToToday={backToToday} interpretNote={interpretNote} interpreting={interpreting}/>
         </div>
         {showsCycle && (
           <div>

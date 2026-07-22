@@ -14,13 +14,14 @@ const todayStr = (d = new Date()) =>
 
 /* ---------- save (upsert) ---------- */
 
-// Upserts on the (user_id, entry_date) unique key — re-saving today just
-// updates the existing row, matching the established project pattern.
-export async function saveTodayEntry(userId, today) {
+// Upserts on the (user_id, entry_date) unique key — re-saving the same
+// date just updates the existing row. dateStr defaults to today, but any
+// caller can pass a past date to log/edit a backdated check-in.
+export async function saveTodayEntry(userId, today, dateStr = null) {
   try {
     const row = {
       user_id:          userId,
-      entry_date:       todayStr(),
+      entry_date:       dateStr || todayStr(),
       mood:             today.mood,
       sleep_hours:      today.sleep,
       water_glasses:    today.water,
@@ -32,6 +33,7 @@ export async function saveTodayEntry(userId, today) {
       symptoms:         today.symptoms,
       flow_intensity:   today.flowIntensity,
       symptom_severity: today.symptomSeverity,
+      note:             today.note || null,
     };
     const { data, error } = await supabase
       .from("tracking_entries")
@@ -43,6 +45,25 @@ export async function saveTodayEntry(userId, today) {
   } catch (e) {
     console.error("saveTodayEntry failed", e);
     throw e;
+  }
+}
+
+// Fetch a single entry for an arbitrary date — used by the "log a
+// different day" flow, since getRecentEntries only covers the last N days
+// and backdated entry needs to reach further back (e.g. "last month").
+export async function getEntryForDate(userId, dateStr) {
+  try {
+    const { data, error } = await supabase
+      .from("tracking_entries")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("entry_date", dateStr)
+      .maybeSingle();
+    if (error) throw error;
+    return data || null;
+  } catch (e) {
+    console.error("getEntryForDate failed", e);
+    return null;
   }
 }
 

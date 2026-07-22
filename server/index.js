@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { cyclePhaseSummary } from "./lib/cycleMath.js";
 
 const app = express();
 app.use(cors());
@@ -86,9 +85,18 @@ If her life_stage is "teen" (13-19):
 - Be careful with anything about weight, dieting, or body image — never reinforce restriction. Encourage talking to a trusted adult for anything heavy.`;
 
 // ----------------------------------------------------------------------------
-// Build the per-call context from the user's actual data
+// Build the per-call context from the user's actual data.
+//
+// current_phase_summary is computed CLIENT-SIDE from her real logged phases
+// (cycle_phase_logs — actual start/end dates she entered), never from a
+// fixed cycle_length/period_length assumption. The server has no DB access
+// and can't compute this itself, so the client sends a plain string like
+// "Currently in her Follicular phase — day 3, as logged." The old server-side
+// cyclePhaseSummary(profile)/cycleMath.js fixed-math version is no longer
+// used here — it was giving the model a different, preset-based answer than
+// what the app itself shows her.
 // ----------------------------------------------------------------------------
-function buildContext(profile = {}, entries = [], support_people = []) {
+function buildContext(profile = {}, entries = [], support_people = [], currentPhaseSummary = null) {
   const lines = ["What you know about her (her own data — use ONLY what's listed here; do not invent anything not below):"];
   let dataPresent = false;
   if (profile.display_name) { lines.push(`Name: ${profile.display_name}`); dataPresent = true; }
@@ -105,12 +113,9 @@ function buildContext(profile = {}, entries = [], support_people = []) {
     lines.push(`Current medications: ${profile.medications.map((m) => [m.name, m.dose, m.schedule].filter(Boolean).join(" ")).join("; ")}`);
     dataPresent = true;
   }
-  if (profile.cycle_start_date) {
-    lines.push(`Cycle: last period started ${profile.cycle_start_date}; avg cycle ${profile.cycle_length || 28} days; period length ${profile.period_length || 5} days`);
-    const summary = cyclePhaseSummary(profile);
-    if (summary) {
-      lines.push(`TODAY: ${summary} (This is the authoritative phase for today — not what she logged on past days.)`);
-    }
+
+  if (currentPhaseSummary) {
+    lines.push(`TODAY: ${currentPhaseSummary} (This is from what she's actually logged on her calendar — the authoritative source, not a prediction.)`);
     dataPresent = true;
   }
   if (profile.birth_control) lines.push(`Contraception: ${profile.birth_control}`);
@@ -144,6 +149,7 @@ function buildContext(profile = {}, entries = [], support_people = []) {
       if (e.personal_stress) bits.push(`personal stress ${e.personal_stress}/5`);
       if (e.cycle_phase) bits.push(`logged phase that day: ${e.cycle_phase}`);
       if (e.symptoms?.length) bits.push(`noticed: ${e.symptoms.join(", ")}`);
+      if (e.note) bits.push(`her own words: "${e.note}"`);
       if (e.moved != null) bits.push(e.moved ? "moved" : "no movement");
       lines.push(`  ${e.entry_date}: ${bits.join(", ") || "(empty)"}`);
     });
@@ -152,16 +158,12 @@ function buildContext(profile = {}, entries = [], support_people = []) {
     lines.push("\nShe hasn't logged any daily check-ins yet. Do not infer specific symptoms or patterns she hasn't reported.");
   }
 
-  // Hard reminder when there's very little personal data — keeps the model honest.
   if (!dataPresent) {
     lines.push("\nIMPORTANT: She has not given you much profile data. Do not invent specifics about her cycle, conditions, doctor, support people, or symptoms. Respond with care but in general terms, and gently invite her to fill in her profile if appropriate.");
   }
   return lines.join("\n");
 }
 
-// ----------------------------------------------------------------------------
-// Crisis response shape
-// ----------------------------------------------------------------------------
 function crisisResponse() {
   return {
     crisis: true,
@@ -171,9 +173,6 @@ function crisisResponse() {
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, gemini: !!GEMINI_KEY, model: MODEL }));
 
-/* Call Gemini with automatic retry on transient errors (503 overload,
-   429 rate limit). Free tier hits 503s often during peak hours; a short
-   backoff usually clears it. Falls back to a secondary model if set. */
 async function callGemini(payload, model = MODEL) {
   const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.0-flash";
   const url = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_KEY}`;
@@ -189,12 +188,10 @@ async function callGemini(payload, model = MODEL) {
       const status = r.status;
       const errText = await r.text();
       console.error(`gemini ${model} attempt ${attempt+1}: ${status}`);
-      // Transient — retry after a short delay
       if ((status === 503 || status === 429) && attempt < 2) {
         await new Promise((ok) => setTimeout(ok, 800 * (attempt + 1)));
         continue;
       }
-      // Final attempt failed on the primary — try fallback model once
       if (model !== FALLBACK_MODEL && (status === 503 || status === 429)) {
         console.log(`falling back to ${FALLBACK_MODEL}`);
         return callGemini(payload, FALLBACK_MODEL);
@@ -210,12 +207,8 @@ async function callGemini(payload, model = MODEL) {
   }
 }
 
-// ----------------------------------------------------------------------------
-// Main companion endpoint — takes a question + full context, returns an answer.
-// Backwards compatible: also handles { message } shape from older clients.
-// ----------------------------------------------------------------------------
 app.post("/api/companion/ask", async (req, res) => {
-  const { question, message, profile, recent_entries, support_people, domain } = req.body || {};
+  const { question, message, profile, recent_entries, support_people, domain, current_phase_summary } = req.body || {};
   const q = (question || message || "").trim();
 
   if (!q) return res.status(400).json({ error: "missing question" });
@@ -228,11 +221,9 @@ app.post("/api/companion/ask", async (req, res) => {
     });
   }
 
-  const context = buildContext(profile, recent_entries, support_people);
+  const context = buildContext(profile, recent_entries, support_people, current_phase_summary);
   const userTurn = `${context}\n\nHer question: ${q}`;
 
-  // Build the active system prompt: base SYSTEM + domain lens if one is set.
-  // The lens goes AT THE END so it has the strongest pull on the response.
   const lens = domain && DOMAIN_LENS[domain] ? `\n\n--- THIS QUESTION'S LENS ---\n${DOMAIN_LENS[domain]}` : "";
   const activeSystem = SYSTEM + lens;
 
@@ -254,19 +245,15 @@ app.post("/api/companion/ask", async (req, res) => {
 
   try {
     const { data } = await callGemini(payload);
-    // If Gemini's own safety blocked the response, treat as crisis-style routing.
     if (data?.candidates?.[0]?.finishReason === "SAFETY") return res.json(crisisResponse());
 
     const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
     if (!text) return res.json({ text: "I'm not sure how to answer that one. Could you rephrase or ask something more specific?" });
 
-    // If we ran into the token cap, append a soft note rather than ending mid-sentence silently.
     let finalText = text;
     if (data?.candidates?.[0]?.finishReason === "MAX_TOKENS") {
       finalText += "\n\n— (I had more to say but ran out of room. Ask me to keep going if useful.)";
     }
-
-    // Secondary crisis check: if the LLM somehow generated something risky, catch it.
     if (isCrisis(finalText)) return res.json(crisisResponse());
 
     return res.json({ text: finalText });
@@ -283,17 +270,11 @@ app.post("/api/companion/ask", async (req, res) => {
   }
 });
 
-// Backwards compat: older clients still POST to /api/companion with { message, stage }
 app.post("/api/companion", async (req, res) => {
   req.body = { question: req.body?.message, ...req.body };
   return app._router.handle({ ...req, url: "/api/companion/ask", originalUrl: "/api/companion/ask" }, res);
 });
 
-/* ----------------------------------------------------------------------------
-   Daily read — generates a short, warm paragraph for Home that reads
-   *her* current state. Pulled from cycle phase + recent check-ins + profile.
-   Lower temperature than the open-ended ask so the voice stays grounded.
-   ---------------------------------------------------------------------------- */
 const TODAY_SYSTEM = `You are FeBrite, a wellness companion writing one short paragraph for a woman opening her app today.
 
 What you're doing:
@@ -316,7 +297,7 @@ If her life_stage is "elder" (post-menopause):
 If her life_stage is "teen": keep the voice warmer, simpler, more reassuring. Normalize cycle variation if relevant.`;
 
 app.post("/api/companion/today", async (req, res) => {
-  const { profile, recent_entries, support_people } = req.body || {};
+  const { profile, recent_entries, support_people, current_phase_summary } = req.body || {};
 
   if (!GEMINI_KEY) {
     return res.json({
@@ -325,7 +306,7 @@ app.post("/api/companion/today", async (req, res) => {
     });
   }
 
-  const context = buildContext(profile, recent_entries, support_people);
+  const context = buildContext(profile, recent_entries, support_people, current_phase_summary);
   const userTurn = `${context}\n\nWrite her daily read for today.`;
 
   const payload = {
@@ -355,6 +336,105 @@ app.post("/api/companion/today", async (req, res) => {
   } catch (e) {
     console.error("today crash", e.message);
     return res.json({ text: "Welcome back. (Couldn't fetch your daily read just now — try again in a moment.)" });
+  }
+});
+
+/* ----------------------------------------------------------------------------
+   NEW: natural-language check-in parser.
+
+   Takes free text ("I've had a rough week, barely slept, cramping on and
+   off") and returns STRUCTURED SUGGESTIONS — never auto-saved, the client
+   always shows these back to her to confirm/adjust before anything is
+   written to the database. Output is constrained to the app's actual
+   vocab (mood 1-5, energy 1-5, the fixed symptom list plus freeform extras,
+   the four real phase names) so it can slot directly into the check-in form.
+   ---------------------------------------------------------------------------- */
+const PARSE_SYSTEM = `You convert a woman's free-text description of how she's doing into structured check-in data for a wellness app. You are a parser, not a conversationalist — output ONLY valid JSON, nothing else, no markdown fences, no commentary.
+
+Output this exact shape:
+{
+  "mood": <integer 1-5 or null>,
+  "energy": <integer 1-5 or null>,
+  "symptoms": [<strings, from this list only: "Cramps","Fatigue","Headache","Bloating","Hot flash","Anxious","Poor sleep","Irritable">],
+  "extra_symptoms": [<strings — anything she described that ISN'T in that list, kept in her own words, short phrases only>],
+  "phase": <one of "menstrual","follicular","ovulation","luteal", or null if not mentioned/unclear>,
+  "sleep_hours": <number or null, only if she gave an actual figure or clearly implied one like "barely slept" -> a low estimate>,
+  "work_stress": <integer 1-5 or null>,
+  "personal_stress": <integer 1-5 or null>,
+  "clean_note": "<a short, tidied-up version of what she said, 1-2 sentences, her voice preserved>"
+}
+
+Rules:
+- mood/energy scale: 1=Low/Drained, 2=Flat/Low, 3=Okay/Steady, 4=Good/Strong, 5=Great/Vibrant.
+- Only fill a field if the text actually supports it. Leave null/empty rather than guessing.
+- "extra_symptoms" is for anything real she described that has no matching item in the fixed list — e.g. "sore lower back", "dizzy spells", "skin breaking out". Keep these short and in her words, not clinical relabeling.
+- Never diagnose, never add symptoms she didn't describe, never invent a phase she didn't mention or strongly imply.
+- If the text is empty, nonsensical, or gives you nothing to work with, return all nulls and empty arrays.`;
+
+app.post("/api/companion/parse-checkin", async (req, res) => {
+  const { text, current_phase_summary } = req.body || {};
+  const t = (text || "").trim();
+
+  if (!t) return res.status(400).json({ error: "missing text" });
+  if (isCrisis(t)) return res.json(crisisResponse());
+
+  if (!GEMINI_KEY) {
+    return res.json({
+      error: "not_configured",
+      text: "The companion isn't configured yet, so I can't interpret free text right now — you can still fill in the form fields directly.",
+    });
+  }
+
+  const contextLine = current_phase_summary ? `For reference, today: ${current_phase_summary}\n\n` : "";
+  const userTurn = `${contextLine}Her own words: "${t}"`;
+
+  const payload = {
+    systemInstruction: { parts: [{ text: PARSE_SYSTEM }] },
+    contents: [{ role: "user", parts: [{ text: userTurn }] }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 500,
+      topP: 0.9,
+      thinkingConfig: { thinkingBudget: 0 },
+      responseMimeType: "application/json",
+    },
+    safetySettings: [
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    ],
+  };
+
+  try {
+    const { data } = await callGemini(payload);
+    if (data?.candidates?.[0]?.finishReason === "SAFETY") return res.json(crisisResponse());
+
+    const raw = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // Model didn't return clean JSON — fail soft, don't pretend to have parsed anything.
+      return res.json({
+        mood: null, energy: null, symptoms: [], extra_symptoms: [], phase: null,
+        sleep_hours: null, work_stress: null, personal_stress: null,
+        clean_note: t,
+        parse_failed: true,
+      });
+    }
+
+    // Safety valve: never let a bad model response introduce a crisis phrase into the note field.
+    if (isCrisis(parsed?.clean_note || "")) return res.json(crisisResponse());
+
+    return res.json(parsed);
+  } catch (e) {
+    console.error("parse-checkin crash", e.message);
+    return res.json({
+      mood: null, energy: null, symptoms: [], extra_symptoms: [], phase: null,
+      sleep_hours: null, work_stress: null, personal_stress: null,
+      clean_note: t,
+      error: true,
+    });
   }
 });
 
