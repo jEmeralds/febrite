@@ -212,9 +212,9 @@ function CycleAndObservations({ profile, entries, accent, go, phaseNow, wheelDat
     }} className="fb-home-bottom">
       {!isElder && (
       <Card style={{ display: "flex", alignItems: "center", gap: 20 }}>
-        {phaseNow && wheelData ? (
+        {phaseNow ? (
           <>
-            <MiniCycleWheel wheelData={wheelData} currentPhase={phaseNow} size={130}/>
+            {wheelData && <MiniCycleWheel wheelData={wheelData} currentPhase={phaseNow} size={130}/>}
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 11.5, color: C.inkSoft, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>
                 Your cycle
@@ -225,7 +225,9 @@ function CycleAndObservations({ profile, entries, accent, go, phaseNow, wheelDat
               <div style={{ fontSize: 13, color: C.inkSoft, lineHeight: 1.5, marginBottom: 10 }}>
                 {predictedNextPeriod
                   ? <>Period predicted around <b style={{ color: C.ink }}>{predictedNextPeriod.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>, based on your {stats.cyclesObserved} logged cycle{stats.cyclesObserved===1?"":"s"}.</>
-                  : "Log a couple more cycles and we'll estimate your next period from your real average — not a guess."}
+                  : wheelData
+                    ? "Log a couple more cycles and we'll estimate your next period from your real average — not a guess."
+                    : "Log a menstrual (period) start on the calendar and we'll start showing your full cycle picture here."}
               </div>
               <button onClick={() => go("track")} style={{
                 fontSize: 13, fontWeight: 700, padding: "8px 14px",

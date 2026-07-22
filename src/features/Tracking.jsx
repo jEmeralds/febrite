@@ -655,9 +655,10 @@ export default function Tracking({ stage, accent }) {
           next.symptoms = Array.from(new Set([...(t.symptoms || []), ...result.symptoms]));
         }
         if (Array.isArray(result.extra_symptoms) && result.extra_symptoms.length) {
-          // Freeform symptoms with no matching preset chip — fold into the
-          // note itself so nothing she said gets silently dropped.
-          next.note = `${t.note}${t.note.endsWith(".") || t.note.endsWith("\n") ? "" : "."} (Also: ${result.extra_symptoms.join(", ")})`;
+          const addition = `(Also: ${result.extra_symptoms.join(", ")})`;
+          if (!t.note.includes(addition)) {
+            next.note = `${t.note}${t.note.endsWith(".") || t.note.endsWith("\n") || t.note.trim() === "" ? "" : "."} ${addition}`;
+          }
         }
         setLogged(false);
         return next;
