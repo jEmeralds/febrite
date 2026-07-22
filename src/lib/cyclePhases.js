@@ -236,6 +236,80 @@ function nextDay(dateStr) {
 
 export { PHASES };
 
+export const PHASE_ORDER = ["menstrual", "follicular", "ovulation", "luteal"];
+export const PHASE_TITLE = { menstrual:"Menstrual", follicular:"Follicular", ovulation:"Ovulation", luteal:"Luteal" };
+
+// Symptoms genuinely typical of a specific phase — kept short and honest,
+// not an exhaustive medical list.
+const PHASE_TYPICAL_SYMPTOMS = {
+  menstrual:  ["Cramps", "Fatigue", "Poor sleep", "Bloating"],
+  follicular: [],
+  ovulation:  ["Bloating"],
+  luteal:     ["Bloating", "Irritable", "Anxious", "Fatigue", "Headache", "Poor sleep"],
+};
+
+// Symptoms that show up across every phase (often just stress or life) —
+// on their own, these should never be treated as evidence for one specific
+// phase over another. This is what lets the app say "you noted anxiety,
+// but that alone doesn't mean ovulation vs luteal — could be work."
+const LOW_SPECIFICITY_SYMPTOMS = ["Anxious", "Irritable", "Fatigue", "Poor sleep", "Headache"];
+
+// Projects which phase she's LIKELY in today, using ONLY her own real
+// average phase lengths (computeCycleStats) — never a fixed 28/14/5 model.
+// Returns null whenever there isn't enough real history to say anything
+// honest, rather than guessing.
+export function predictedPhaseForDate(logs, stats, dateStr) {
+  const sorted = [...logs].sort((a, b) => a.start_date.localeCompare(b.start_date));
+  const menstrualStarts = sorted.filter((l) => l.phase === "menstrual").map((l) => l.start_date);
+  const cycleStart = [...menstrualStarts].reverse().find((d) => d <= dateStr);
+  if (!cycleStart || !stats?.byPhase?.menstrual || !stats.cyclesObserved) return null;
+
+  const dayIndex = (d) =>
+    Math.round((new Date(d + "T00:00:00") - new Date(cycleStart + "T00:00:00")) / 86400000) + 1;
+  const daysElapsed = dayIndex(dateStr);
+  if (daysElapsed < 1) return null;
+
+  let cum = 0;
+  let lastKnown = null;
+  for (const phase of PHASE_ORDER) {
+    const avg = stats.byPhase[phase]?.avgDays;
+    if (avg == null) break; // no more real evidence past this point — stop rather than guess
+    cum += avg;
+    lastKnown = phase;
+    if (daysElapsed <= cum) return { phase, cycleStart, daysElapsed, avgCycleLength: stats.avgCycleLength };
+  }
+  if (!lastKnown) return null;
+  // Past every phase we have real averages for — most likely still in the
+  // last known phase, or this cycle is simply running longer than usual.
+  return { phase: "luteal", cycleStart, daysElapsed, avgCycleLength: stats.avgCycleLength, overdue: true };
+}
+
+// Compares a selected phase against the timing-based prediction. Symptom
+// evidence only matters if it's SPECIFIC to the phase she picked — generic,
+// stress-explainable symptoms never override the timing signal. Returns
+// null when there's nothing worth flagging (agreement, no prediction
+// available, or she has real specific evidence for her choice).
+export function checkPhaseConsistency({ selectedPhase, predicted, symptoms = [] }) {
+  if (!predicted || !selectedPhase) return null;
+  if (selectedPhase === predicted.phase) return null;
+
+  const specificSupport = symptoms.some(
+    (s) => !LOW_SPECIFICITY_SYMPTOMS.includes(s) && (PHASE_TYPICAL_SYMPTOMS[selectedPhase] || []).includes(s)
+  );
+  if (specificSupport) return null;
+
+  const genericNote = symptoms.length
+    ? " What you noted can happen in any phase, so it's not strong evidence either way."
+    : "";
+
+  return {
+    predictedPhase: predicted.phase,
+    daysElapsed: predicted.daysElapsed,
+    avgCycleLength: predicted.avgCycleLength,
+    message: `Based on your own logged cycles, today looks more like your ${PHASE_TITLE[predicted.phase]} phase (day ${predicted.daysElapsed} since your last period, and your cycles average ~${Math.round(predicted.avgCycleLength || 0)} days).${genericNote}`,
+  };
+}
+
 // Used by the check-in's phase chip. Unlike startPhase (which always opens
 // a fresh log), this recognizes when today is simply a continuation of an
 // already-logged streak of the SAME phase and extends it — so logging

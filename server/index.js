@@ -368,6 +368,7 @@ Rules:
 - mood/energy scale: 1=Low/Drained, 2=Flat/Low, 3=Okay/Steady, 4=Good/Strong, 5=Great/Vibrant.
 - Only fill a field if the text actually supports it. Leave null/empty rather than guessing.
 - "extra_symptoms" is for anything real she described that has no matching item in the fixed list — e.g. "sore lower back", "dizzy spells", "skin breaking out". Keep these short and in her words, not clinical relabeling.
+- PHASE FIELD — BE CONSERVATIVE: only set "phase" if she explicitly names it ("I'm on my period", "I think I'm ovulating") or describes a specific physiological marker (bleeding/spotting started, a clear ovulation-type pain). Generic symptoms like anxiety, irritability, fatigue, poor sleep, or headache happen in every phase and are usually just stress or life — do NOT infer a phase from these alone. When in doubt, leave phase null; the app has a separate, more reliable way to check phase timing against her actual logged history.
 - Never diagnose, never add symptoms she didn't describe, never invent a phase she didn't mention or strongly imply.
 - If the text is empty, nonsensical, or gives you nothing to work with, return all nulls and empty arrays.`;
 

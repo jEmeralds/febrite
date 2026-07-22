@@ -12,7 +12,7 @@ import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
 import { saveTodayEntry, getRecentEntries, getEntryForDate, buildChartData } from "../lib/trackingApi";
 import { parseCheckinText } from "../lib/companion";
-import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, logPhaseForToday, logPhaseRange } from "../lib/cyclePhases";
+import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, logPhaseForToday, logPhaseRange, predictedPhaseForDate, checkPhaseConsistency, PHASE_TITLE as PHASE_TITLE_ENUM } from "../lib/cyclePhases";
 import RealCycleWheel from "../components/RealCycleWheel";
 import { useCurrentDate } from "../lib/useCurrentDate";
 import CycleCalendarV2 from "../components/CycleCalendarV2";
@@ -58,6 +58,7 @@ const PHASE_COLOR = {
 };
 // lowercase enum -> display label, since cycle_phase_logs stores lowercase
 const PHASE_TITLE = { menstrual:"Menstrual", follicular:"Follicular", ovulation:"Ovulation", luteal:"Luteal" };
+const PHASE_TO_ENUM = { Menstrual:"menstrual", Follicular:"follicular", Ovulation:"ovulation", Luteal:"luteal" };
 
 /* ── Phase status (replaces the fixed-proportion cycle wheel) ───────────
    No wheel, because a wheel implies every phase is a fixed slice of a
@@ -180,7 +181,7 @@ function TrackHero({ entries, accent, todayLogged, phaseNow, stats, wheelData })
 }
 
 /* ── Check-in panel ───────────────────────────────────────── */
-function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, logged, accent, showsCycle, checkinDate, todayDate, manualDate, setManualDate, setCheckinDate, backToToday, interpretNote, interpreting }) {
+function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, logged, accent, showsCycle, checkinDate, todayDate, manualDate, setManualDate, setCheckinDate, backToToday, interpretNote, interpreting, consistencyWarning, useSuggestedPhase, dismissWarning }) {
   const [expanded, setExpanded] = useState(false);
   const canSave = today.mood != null;
   const isMenstrual = today.phase === "Menstrual";
@@ -271,6 +272,20 @@ function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, lo
                     <Chip key={p} active={today.phase===p} onClick={() => set("phase", today.phase===p ? null : p)} accent={accent}>{p}</Chip>
                   ))}
                 </div>
+
+                {consistencyWarning && (
+                  <div style={{ marginTop:12, padding:"12px 14px", borderRadius:12, background:"rgba(208,140,59,.08)", border:"1px solid rgba(208,140,59,.28)" }}>
+                    <div style={{ fontSize:13, color:C.ink, lineHeight:1.5, marginBottom:10 }}>{consistencyWarning.message}</div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <button onClick={useSuggestedPhase} style={{ fontSize:12.5, fontWeight:700, padding:"7px 12px", borderRadius:9, border:"none", background:"#D08C3B", color:"#fff", cursor:"pointer", fontFamily:"Karla,sans-serif" }}>
+                        Use {PHASES.find((p) => p.toLowerCase() === consistencyWarning.predictedPhase)} instead
+                      </button>
+                      <button onClick={dismissWarning} style={{ fontSize:12.5, fontWeight:600, padding:"7px 12px", borderRadius:9, border:"1px solid rgba(208,140,59,.4)", background:"transparent", color:"#8A5A22", cursor:"pointer", fontFamily:"Karla,sans-serif" }}>
+                        No, {today.phase} is right
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {isMenstrual && (
                   <div style={{ marginTop:14, padding:"14px 16px", borderRadius:12, background:"rgba(196,74,74,.06)", border:"1px solid rgba(196,74,74,.18)" }}>
@@ -498,6 +513,17 @@ export default function Tracking({ stage, accent }) {
 
   const stats = useMemo(() => computeCycleStats(phaseLogs), [phaseLogs]);
   const wheelData = useMemo(() => buildCurrentCycleWheelData(phaseLogs, todayDate), [phaseLogs, todayDate]);
+  const predictedForCheckin = useMemo(() => predictedPhaseForDate(phaseLogs, stats, checkinDate), [phaseLogs, stats, checkinDate]);
+  const [dismissedWarningKey, setDismissedWarningKey] = useState(null);
+  const consistencyWarning = useMemo(() => {
+    const enumPhase = PHASE_TO_ENUM[today.phase];
+    if (!enumPhase) return null;
+    const warning = checkPhaseConsistency({ selectedPhase: enumPhase, predicted: predictedForCheckin, symptoms: today.symptoms });
+    if (!warning) return null;
+    const key = `${enumPhase}:${warning.predictedPhase}:${checkinDate}`;
+    if (key === dismissedWarningKey) return null;
+    return { ...warning, key };
+  }, [today.phase, today.symptoms, predictedForCheckin, checkinDate, dismissedWarningKey]);
 
   const reloadPhaseData = useCallback(async () => {
     if (!user) return;
@@ -569,8 +595,6 @@ export default function Tracking({ stage, accent }) {
     setLogged(false);
   };
 
-  const PHASE_TO_ENUM = { Menstrual:"menstrual", Follicular:"follicular", Ovulation:"ovulation", Luteal:"luteal" };
-
   const save = async () => {
     if (!user || saving || today.mood == null) return;
     setSaving(true);
@@ -600,6 +624,13 @@ export default function Tracking({ stage, accent }) {
   };
 
   const backToToday = () => { setManualDate(false); setCheckinDate(todayDate); };
+
+  const useSuggestedPhase = () => {
+    if (!consistencyWarning) return;
+    const titleCase = PHASE_TITLE_ENUM[consistencyWarning.predictedPhase];
+    set("phase", titleCase);
+  };
+  const dismissWarning = () => { if (consistencyWarning) setDismissedWarningKey(consistencyWarning.key); };
 
   // Natural-language interpretation: send her free text to the companion,
   // pre-fill whatever it could confidently extract. Nothing is saved here —
@@ -640,7 +671,7 @@ export default function Tracking({ stage, accent }) {
       <TrackHero entries={entries} accent={accent} todayLogged={logged} phaseNow={phaseNow} stats={stats} wheelData={wheelData}/>
       <div className="fb-track-mid" style={{ display:"grid", gap:18, gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)" }}>
         <div>
-          <CheckInPanel today={today} set={set} toggleSymptom={toggleSymptom} setSeverity={setSeverity} save={save} saving={saving} logged={logged} accent={accent} showsCycle={showsCycle} checkinDate={checkinDate} todayDate={todayDate} manualDate={manualDate} setManualDate={setManualDate} setCheckinDate={setCheckinDate} backToToday={backToToday} interpretNote={interpretNote} interpreting={interpreting}/>
+          <CheckInPanel today={today} set={set} toggleSymptom={toggleSymptom} setSeverity={setSeverity} save={save} saving={saving} logged={logged} accent={accent} showsCycle={showsCycle} checkinDate={checkinDate} todayDate={todayDate} manualDate={manualDate} setManualDate={setManualDate} setCheckinDate={setCheckinDate} backToToday={backToToday} interpretNote={interpretNote} interpreting={interpreting} consistencyWarning={consistencyWarning} useSuggestedPhase={useSuggestedPhase} dismissWarning={dismissWarning}/>
         </div>
         {showsCycle && (
           <div>
