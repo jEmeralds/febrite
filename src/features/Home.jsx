@@ -190,7 +190,7 @@ function QuickActions({ go, accent, profile, todayLogged, phaseNow }) {
 /* ============================================================
    CYCLE SNAPSHOT + OBSERVATIONS — paired panel
    ============================================================ */
-function CycleAndObservations({ profile, entries, accent, go, phaseNow, wheelData, stats }) {
+function CycleAndObservations({ profile, entries, accent, go, phaseNow, wheelData, stats, todayDate }) {
   const observations = useMemo(() => recentObservations(entries), [entries]);
   const phaseColor = phaseNow ? PHASE_COLOR[phaseNow.phase] || accent : accent;
   const isElder = profile?.life_stage === "elder";
@@ -204,6 +204,12 @@ function CycleAndObservations({ profile, entries, accent, go, phaseNow, wheelDat
         return d;
       })()
     : null;
+  // A "predicted" date that's already in the past isn't a prediction
+  // anymore — it means this cycle is running longer than her average, or a
+  // period start didn't get logged yet. Say that plainly instead of
+  // presenting a bygone date as if it were still upcoming.
+  const isOverdue = predictedNextPeriod && todayDate &&
+    `${predictedNextPeriod.getFullYear()}-${String(predictedNextPeriod.getMonth()+1).padStart(2,"0")}-${String(predictedNextPeriod.getDate()).padStart(2,"0")}` < todayDate;
 
   return (
     <div style={{
@@ -224,7 +230,9 @@ function CycleAndObservations({ profile, entries, accent, go, phaseNow, wheelDat
               </div>
               <div style={{ fontSize: 13, color: C.inkSoft, lineHeight: 1.5, marginBottom: 10 }}>
                 {predictedNextPeriod
-                  ? <>Period predicted around <b style={{ color: C.ink }}>{predictedNextPeriod.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>, based on your {stats.cyclesObserved} logged cycle{stats.cyclesObserved===1?"":"s"}.</>
+                  ? isOverdue
+                    ? <>Your period was predicted around <b style={{ color: C.ink }}>{predictedNextPeriod.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b> based on your average — this cycle may be running longer than usual, or a start date hasn't been logged yet.</>
+                    : <>Period predicted around <b style={{ color: C.ink }}>{predictedNextPeriod.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>, based on your {stats.cyclesObserved} logged cycle{stats.cyclesObserved===1?"":"s"}.</>
                   : wheelData
                     ? "Log a couple more cycles and we'll estimate your next period from your real average — not a guess."
                     : "Log a menstrual (period) start on the calendar and we'll start showing your full cycle picture here."}
@@ -355,7 +363,7 @@ export default function Home({ stage, accent, go }) {
 
       <DailyReadCard profile={profile} accent={accent} phaseNow={phaseNow}/>
       <QuickActions go={go} accent={accent} profile={profile} todayLogged={todayLogged} phaseNow={phaseNow}/>
-      <CycleAndObservations profile={profile} entries={entries} accent={accent} go={go} phaseNow={phaseNow} wheelData={wheelData} stats={stats}/>
+      <CycleAndObservations profile={profile} entries={entries} accent={accent} go={go} phaseNow={phaseNow} wheelData={wheelData} stats={stats} todayDate={todayDate}/>
     </div>
   );
 }
