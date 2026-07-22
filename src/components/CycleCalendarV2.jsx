@@ -13,59 +13,65 @@ const PHASE_LABEL = {
   menstrual: "Menstrual", follicular: "Follicular", ovulation: "Ovulation", luteal: "Luteal",
 };
 
-// Local Y-M-D string — NOT toISOString(), which converts to UTC first and
-// silently shifts the date by a day for anyone east of UTC (e.g. Doha, UTC+3).
-const iso = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
-const daysInMonth = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+const pad2 = (n) => String(n).padStart(2, "0");
+const toKey = (y, m, day) => `${y}-${pad2(m + 1)}-${pad2(day)}`;
 
-/* Build a real month grid: correct weekday offset for day 1, correct
-   number of days for THIS month (28/29/30/31), no assumptions. */
-function buildMonthGrid(monthDate) {
-  const first = startOfMonth(monthDate);
-  const totalDays = daysInMonth(monthDate);
-  const leadingBlanks = first.getDay(); // 0=Sun
-  const cells = [];
-  for (let i = 0; i < leadingBlanks; i++) cells.push(null);
-  for (let day = 1; day <= totalDays; day++) {
-    cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
+function daysInMonth(year, monthIndex) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+// Builds a lookup: "YYYY-MM-DD" -> the log covering that day, but ONLY up
+// through todayKey for open-ended (still-ongoing) logs. This is computed
+// as an explicit whitelist of valid keys per log — deliberately avoiding
+// any date-object arithmetic or comparison operators on strings, since
+// that's the class of bug we spent a long time chasing without proof.
+function buildDayMap(logs, todayKey) {
+  const map = {};
+  for (const log of logs) {
+    let cursor = new Date(log.start_date + "T00:00:00");
+    const hardStop = log.end_date
+      ? new Date(log.end_date + "T00:00:00")
+      : new Date(todayKey + "T00:00:00");
+    // safety valve: never walk more than 400 days for one log, so a bad
+    // row can't hang the browser
+    let guard = 0;
+    while (cursor.getTime() <= hardStop.getTime() && guard < 400) {
+      const key = toKey(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
+      map[key] = log;
+      cursor.setDate(cursor.getDate() + 1);
+      guard++;
+    }
   }
-  return cells;
+  return map;
 }
 
-// Which phase (if any) covers a given date, from the real logs. An
-// open-ended log (still ongoing, no end_date) only covers up through
-// TODAY — it must never be treated as covering future days that haven't
-// happened yet, no matter how far the log's start_date is in the past.
-function phaseForDate(logs, dateStr, todayStr) {
-  const log = logs.find((l) =>
-    l.start_date <= dateStr && (l.end_date ? l.end_date >= dateStr : dateStr <= todayStr)
-  );
-  return log || null;
-}
+export default function CycleCalendarV2({ userId, logs, accent, onChanged, todayDate }) {
+  const now = new Date();
+  const todayKey = todayDate || toKey(now.getFullYear(), now.getMonth(), now.getDate());
 
-export default function CycleMonthCalendar({ userId, logs, accent, onChanged, todayDate }) {
-  const [month, setMonth] = useState(() => startOfMonth(new Date()));
-  const [pickerFor, setPickerFor] = useState(null); // { start, end } — single tap opens this immediately
-  const [dayInfo, setDayInfo] = useState(null); // clicked an already-logged day -> show edit/delete
+  const [viewYear, setViewYear] = useState(() => Number(todayKey.slice(0, 4)));
+  const [viewMonth, setViewMonth] = useState(() => Number(todayKey.slice(5, 7)) - 1); // 0-indexed
+  const [pickerFor, setPickerFor] = useState(null);
+  const [dayInfo, setDayInfo] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // Always defer to the same date source as the rest of the page (useCurrentDate),
-  // so "today" never disagrees between the hero and the calendar.
-  const todayStr = todayDate || iso(new Date());
-  const cells = useMemo(() => buildMonthGrid(month), [month]);
-  const monthLabel = month.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const dayMap = useMemo(() => buildDayMap(logs, todayKey), [logs, todayKey]);
 
-  const goMonth = (delta) => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const totalDays = daysInMonth(viewYear, viewMonth);
+  const leadingBlanks = new Date(viewYear, viewMonth, 1).getDay();
 
-  // Single tap: if the day already has a log, show it (with edit/delete).
-  // Otherwise open the phase picker immediately for that single day — the
-  // person can widen it to a range right there in the picker, no drag needed.
-  const handleDayClick = (dateStr) => {
-    const existing = phaseForDate(logs, dateStr, todayStr);
-    if (existing) { setDayInfo({ dateStr, log: existing }); return; }
-    setPickerFor({ start: dateStr, end: dateStr });
+  const goMonth = (delta) => {
+    let m = viewMonth + delta, y = viewYear;
+    if (m < 0) { m = 11; y -= 1; }
+    if (m > 11) { m = 0; y += 1; }
+    setViewMonth(m); setViewYear(y);
+  };
+
+  const handleDayClick = (dateKey) => {
+    const existing = dayMap[dateKey];
+    if (existing) { setDayInfo({ dateKey, log: existing }); return; }
+    setPickerFor({ start: dateKey, end: dateKey });
   };
 
   const extendPickerEnd = (delta) => {
@@ -73,7 +79,7 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged, to
       if (!p) return p;
       const d = new Date(p.end + "T00:00:00");
       d.setDate(d.getDate() + delta);
-      const newEnd = iso(d);
+      const newEnd = toKey(d.getFullYear(), d.getMonth(), d.getDate());
       if (newEnd < p.start) return p;
       return { ...p, end: newEnd };
     });
@@ -102,6 +108,14 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged, to
     }
   };
 
+  const dayCountLabel = (() => {
+    if (!pickerFor) return "";
+    const a = new Date(pickerFor.start + "T00:00:00");
+    const b = new Date(pickerFor.end + "T00:00:00");
+    const n = Math.round((b - a) / 86400000) + 1;
+    return `${n} day${n === 1 ? "" : "s"}`;
+  })();
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -121,25 +135,29 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged, to
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
-        {cells.map((date, i) => {
-          if (!date) return <div key={i} />;
-          const dateStr = iso(date);
-          const log = phaseForDate(logs, dateStr, todayStr);
+        {Array.from({ length: leadingBlanks }).map((_, i) => <div key={`b${i}`} />)}
+        {Array.from({ length: totalDays }).map((_, i) => {
+          const dayNum = i + 1;
+          const dateKey = toKey(viewYear, viewMonth, dayNum);
+          const log = dayMap[dateKey] || null;
           const color = log ? PHASE_COLOR[log.phase] : null;
-          const isToday = dateStr === todayStr;
+          const isToday = dateKey === todayKey;
+          const isFuture = dateKey > todayKey;
           return (
             <button
-              key={dateStr}
-              onClick={() => handleDayClick(dateStr)}
-              title={log ? `${dateStr} · ${PHASE_LABEL[log.phase]}${!log.end_date ? " · ongoing" : ""}` : dateStr}
+              key={dateKey}
+              onClick={() => handleDayClick(dateKey)}
+              title={log ? `${dateKey} · ${PHASE_LABEL[log.phase]}${!log.end_date ? " · ongoing" : ""}` : dateKey}
               style={{
-                aspectRatio: "1", minHeight: 34, borderRadius: 10, border: isToday ? `2px solid ${accent}` : "1px solid transparent",
+                aspectRatio: "1", minHeight: 34, borderRadius: 10,
+                border: isToday ? `2px solid ${accent}` : "1px solid transparent",
                 background: color ? `${color}2A` : "rgba(44,35,32,.035)",
-                color: C.ink, fontSize: 12, fontWeight: isToday ? 700 : 500, cursor: "pointer",
+                color: isFuture ? "rgba(44,35,32,.4)" : C.ink,
+                fontSize: 12, fontWeight: isToday ? 700 : 500, cursor: "pointer",
                 display: "grid", placeItems: "center", position: "relative", fontFamily: "Karla,sans-serif",
               }}
             >
-              {date.getDate()}
+              {dayNum}
               {log && !log.end_date && (
                 <div style={{ position: "absolute", top: 3, right: 4, width: 5, height: 5, borderRadius: "50%", background: color }} />
               )}
@@ -157,7 +175,6 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged, to
         ))}
       </div>
 
-      {/* Phase picker — opens on a single tap; range is adjustable right here */}
       {pickerFor && (
         <Overlay onClose={() => setPickerFor(null)}>
           <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 4 }}>Logging phase starting</div>
@@ -170,8 +187,7 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged, to
               <Minus size={14} />
             </button>
             <div style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 600, color: C.ink }}>
-              {Math.round((new Date(pickerFor.end) - new Date(pickerFor.start)) / 86400000) + 1} day
-              {Math.round((new Date(pickerFor.end) - new Date(pickerFor.start)) / 86400000) === 0 ? "" : "s"}
+              {dayCountLabel}
               {pickerFor.end !== pickerFor.start && <span style={{ color: C.inkSoft, fontWeight: 400 }}> · through {pickerFor.end}</span>}
             </div>
             <button onClick={() => extendPickerEnd(1)}
@@ -192,10 +208,9 @@ export default function CycleMonthCalendar({ userId, logs, accent, onChanged, to
         </Overlay>
       )}
 
-      {/* Info / edit / delete for an already-logged day */}
       {dayInfo && (
         <Overlay onClose={() => setDayInfo(null)}>
-          <div style={{ fontSize: 14, color: C.ink, marginBottom: 4, fontWeight: 600 }}>{dayInfo.dateStr}</div>
+          <div style={{ fontSize: 14, color: C.ink, marginBottom: 4, fontWeight: 600 }}>{dayInfo.dateKey}</div>
           <div style={{ fontSize: 13, color: PHASE_COLOR[dayInfo.log.phase], fontWeight: 700, marginBottom: 4 }}>
             {PHASE_LABEL[dayInfo.log.phase]}
           </div>

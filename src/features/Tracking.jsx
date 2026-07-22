@@ -14,7 +14,7 @@ import { saveTodayEntry, getRecentEntries, buildChartData } from "../lib/trackin
 import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, logPhaseForToday } from "../lib/cyclePhases";
 import RealCycleWheel from "../components/RealCycleWheel";
 import { useCurrentDate } from "../lib/useCurrentDate";
-import CycleMonthCalendar from "../components/CycleMonthCalendar";
+import CycleCalendarV2 from "../components/CycleCalendarV2";
 import ReportsPanel from "./track/ReportsPanel";
 
 const MOODS = [
@@ -536,7 +536,7 @@ export default function Tracking({ stage, accent }) {
                 <CalendarHeart size={16} style={{ color:accent }}/>
                 <div style={{ fontFamily:"Fraunces,serif", fontSize:"clamp(17px,3.5vw,20px)", color:C.ink }}>Your cycle calendar</div>
               </div>
-              <CycleMonthCalendar userId={user?.id} logs={phaseLogs} accent={accent} onChanged={reloadPhaseData} todayDate={todayDate}/>
+              <CycleCalendarV2 userId={user?.id} logs={phaseLogs} accent={accent} onChanged={reloadPhaseData} todayDate={todayDate}/>
             </Card>
           </div>
         )}
