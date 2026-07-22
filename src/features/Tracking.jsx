@@ -12,7 +12,7 @@ import { useAuth } from "../lib/auth";
 import { Card, SectionHead, C } from "../components/ui";
 import { saveTodayEntry, getRecentEntries, getEntryForDate, buildChartData } from "../lib/trackingApi";
 import { parseCheckinText } from "../lib/companion";
-import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, logPhaseForToday } from "../lib/cyclePhases";
+import { currentPhase, getPhaseLogs, computeCycleStats, buildCurrentCycleWheelData, logPhaseForToday, logPhaseRange } from "../lib/cyclePhases";
 import RealCycleWheel from "../components/RealCycleWheel";
 import { useCurrentDate } from "../lib/useCurrentDate";
 import CycleCalendarV2 from "../components/CycleCalendarV2";
@@ -586,7 +586,13 @@ export default function Tracking({ stage, accent }) {
       // to a different place. "N/A" or no selection means nothing to log.
       const enumPhase = PHASE_TO_ENUM[today.phase];
       if (enumPhase) {
-        await logPhaseForToday(user.id, enumPhase, checkinDate);
+        if (checkinDate === todayDate) {
+          await logPhaseForToday(user.id, enumPhase, checkinDate);
+        } else {
+          // A past day is never "still ongoing" — always close it out as a
+          // real single day, so it can't collide with today's open log.
+          await logPhaseRange(user.id, enumPhase, checkinDate, checkinDate);
+        }
         reloadPhaseData();
       }
     } catch (e) { console.error("save", e); }
@@ -602,7 +608,7 @@ export default function Tracking({ stage, accent }) {
     if (!today.note?.trim() || interpreting) return;
     setInterpreting(true);
     try {
-      const result = await parseCheckinText({ text: today.note, userId: user?.id });
+      const result = await parseCheckinText({ text: today.note, userId: user?.id, includeTodayContext: checkinDate === todayDate });
       setToday((t) => {
         const next = { ...t };
         if (result.mood != null)   next.mood = result.mood;

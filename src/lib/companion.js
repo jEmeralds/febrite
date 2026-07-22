@@ -115,11 +115,11 @@ export async function askCompanion({ question, profile, userId, domain = null })
    structured suggestions — mood/energy/symptoms/phase/etc — for the
    check-in form to pre-fill. NEVER auto-saves; the caller always shows
    these back to her to confirm or adjust before anything is written. */
-export async function parseCheckinText({ text, userId }) {
+export async function parseCheckinText({ text, userId, includeTodayContext = true }) {
   if (!API) {
     return { error: "not_configured", text: "The companion isn't connected yet, so I can't interpret free text — you can still fill in the fields directly." };
   }
-  const current_phase_summary = await buildPhaseSummary(userId);
+  const current_phase_summary = includeTodayContext ? await buildPhaseSummary(userId) : null;
   try {
     const r = await fetch(`${API}/api/companion/parse-checkin`, {
       method: "POST",

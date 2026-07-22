@@ -177,7 +177,7 @@ export default function CycleCalendarV2({ userId, logs, accent, onChanged, today
 
       {pickerFor && (
         <Overlay onClose={() => setPickerFor(null)}>
-          <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 4 }}>Logging phase starting</div>
+          <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 4 }}>This day isn't logged yet — starting</div>
           <div style={{ fontSize: 15, color: C.ink, marginBottom: 14, fontWeight: 600 }}>{pickerFor.start}</div>
 
           <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 6 }}>How many days did it last?</div>

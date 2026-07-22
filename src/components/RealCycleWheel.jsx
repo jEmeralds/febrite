@@ -61,12 +61,14 @@ export default function RealCycleWheel({ wheelData, currentPhase, accent, size =
       <circle cx={mx} cy={my} r={18} fill={`${phaseColor}33`} />
       <circle cx={mx} cy={my} r={13} fill="#fff" stroke={phaseColor} strokeWidth={3.5} />
       <circle cx={mx} cy={my} r={5} fill={phaseColor} />
-      <text x={cx} y={cy - 28} textAnchor="middle" fontFamily="Karla,sans-serif" fontSize={11} fontWeight={700} fill="rgba(44,35,32,.5)" letterSpacing=".18em">CYCLE DAY</text>
+      <text x={cx} y={cy - 28} textAnchor="middle" fontFamily="Karla,sans-serif" fontSize={10} fontWeight={700} fill="rgba(44,35,32,.5)" letterSpacing=".1em">DAYS SINCE LAST PERIOD</text>
       <text x={cx} y={cy + 18} textAnchor="middle" fontFamily="Fraunces,serif" fontSize={68} fill="#2C2320" letterSpacing="-.02em">{totalDays}</text>
       <text x={cx} y={cy + 48} textAnchor="middle" fontFamily="Karla,sans-serif" fontSize={13.5} fontWeight={700} fill={phaseColor} letterSpacing=".12em">
         {currentPhase ? PHASE_TITLE[currentPhase.phase].toUpperCase() : ""}
       </text>
-      <text x={cx} y={cy + 70} textAnchor="middle" fontFamily="Karla,sans-serif" fontSize={11.5} fill="rgba(44,35,32,.5)">this cycle, as logged</text>
+      <text x={cx} y={cy + 70} textAnchor="middle" fontFamily="Karla,sans-serif" fontSize={11.5} fill="rgba(44,35,32,.5)">
+        {currentPhase ? `day ${currentPhase.dayInPhase} of this phase` : "this cycle, as logged"}
+      </text>
     </svg>
   );
 }
