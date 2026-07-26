@@ -181,7 +181,7 @@ function TrackHero({ entries, accent, todayLogged, phaseNow, stats, wheelData })
 }
 
 /* ── Check-in panel ───────────────────────────────────────── */
-function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, logged, accent, showsCycle, checkinDate, todayDate, manualDate, setManualDate, setCheckinDate, backToToday, interpretNote, interpreting, consistencyWarning, useSuggestedPhase, dismissWarning }) {
+function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, logged, accent, showsCycle, checkinDate, todayDate, manualDate, setManualDate, setCheckinDate, backToToday, interpretNote, interpreting, consistencyWarning, useSuggestedPhase, dismissWarning, manualPhaseClick, phaseFromTiming }) {
   const [expanded, setExpanded] = useState(false);
   const canSave = today.mood != null;
   const isMenstrual = today.phase === "Menstrual";
@@ -269,9 +269,14 @@ function CheckInPanel({ today, set, toggleSymptom, setSeverity, save, saving, lo
                 <Lbl>Cycle phase <span style={{ color:C.inkSoft, fontWeight:400 }}>(this logs it, same as tapping the calendar)</span></Lbl>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   {PHASES.map((p) => (
-                    <Chip key={p} active={today.phase===p} onClick={() => set("phase", today.phase===p ? null : p)} accent={accent}>{p}</Chip>
+                    <Chip key={p} active={today.phase===p} onClick={() => manualPhaseClick(p)} accent={accent}>{p}</Chip>
                   ))}
                 </div>
+                {phaseFromTiming && today.phase && (
+                  <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:6, fontStyle:"italic" }}>
+                    Suggested from your logged pattern, not from what you wrote — adjust if it's not right.
+                  </div>
+                )}
 
                 {consistencyWarning && (
                   <div style={{ marginTop:12, padding:"12px 14px", borderRadius:12, background:"rgba(208,140,59,.08)", border:"1px solid rgba(208,140,59,.28)" }}>
@@ -500,6 +505,7 @@ export default function Tracking({ stage, accent }) {
   const [phaseLogs, setPhaseLogs] = useState([]);
   const [phaseNow, setPhaseNow] = useState(null);
   const [interpreting, setInterpreting] = useState(false);
+  const [phaseFromTiming, setPhaseFromTiming] = useState(false);
   const showsCycle = !["elder"].includes(stage);
   const todayDate  = useCurrentDate();
   // The date this check-in form is currently editing. Defaults to today,
@@ -625,6 +631,11 @@ export default function Tracking({ stage, accent }) {
 
   const backToToday = () => { setManualDate(false); setCheckinDate(todayDate); };
 
+  const manualPhaseClick = (p) => {
+    setPhaseFromTiming(false);
+    set("phase", today.phase === p ? null : p);
+  };
+
   const useSuggestedPhase = () => {
     if (!consistencyWarning) return;
     const titleCase = PHASE_TITLE_ENUM[consistencyWarning.predictedPhase];
@@ -650,6 +661,13 @@ export default function Tracking({ stage, accent }) {
         if (result.phase) {
           const titleCase = result.phase.charAt(0).toUpperCase() + result.phase.slice(1);
           next.phase = titleCase;
+          setPhaseFromTiming(false);
+        } else if (predictedForCheckin && !t.phase) {
+          // Her text didn't mention a phase explicitly — fall back to what her
+          // own logged timing suggests, rather than leaving this blank when we
+          // actually have a reasonable, data-backed guess available.
+          next.phase = PHASE_TITLE_ENUM[predictedForCheckin.phase];
+          setPhaseFromTiming(true);
         }
         if (Array.isArray(result.symptoms) && result.symptoms.length) {
           next.symptoms = Array.from(new Set([...(t.symptoms || []), ...result.symptoms]));
@@ -672,7 +690,7 @@ export default function Tracking({ stage, accent }) {
       <TrackHero entries={entries} accent={accent} todayLogged={logged} phaseNow={phaseNow} stats={stats} wheelData={wheelData}/>
       <div className="fb-track-mid" style={{ display:"grid", gap:18, gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)" }}>
         <div>
-          <CheckInPanel today={today} set={set} toggleSymptom={toggleSymptom} setSeverity={setSeverity} save={save} saving={saving} logged={logged} accent={accent} showsCycle={showsCycle} checkinDate={checkinDate} todayDate={todayDate} manualDate={manualDate} setManualDate={setManualDate} setCheckinDate={setCheckinDate} backToToday={backToToday} interpretNote={interpretNote} interpreting={interpreting} consistencyWarning={consistencyWarning} useSuggestedPhase={useSuggestedPhase} dismissWarning={dismissWarning}/>
+          <CheckInPanel today={today} set={set} toggleSymptom={toggleSymptom} setSeverity={setSeverity} save={save} saving={saving} logged={logged} accent={accent} showsCycle={showsCycle} checkinDate={checkinDate} todayDate={todayDate} manualDate={manualDate} setManualDate={setManualDate} setCheckinDate={setCheckinDate} backToToday={backToToday} interpretNote={interpretNote} interpreting={interpreting} consistencyWarning={consistencyWarning} useSuggestedPhase={useSuggestedPhase} dismissWarning={dismissWarning} manualPhaseClick={manualPhaseClick} phaseFromTiming={phaseFromTiming}/>
         </div>
         {showsCycle && (
           <div>
