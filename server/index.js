@@ -364,11 +364,19 @@ Output this exact shape:
   "clean_note": "<a short, tidied-up version of what she said, 1-2 sentences, her voice preserved>"
 }
 
-Rules:
-- mood/energy scale: 1=Low/Drained, 2=Flat/Low, 3=Okay/Steady, 4=Good/Strong, 5=Great/Vibrant.
-- Only fill a field if the text actually supports it. Leave null/empty rather than guessing.
+MOOD AND ENERGY — INFER FROM OVERALL TONE, this is the whole point of this field:
+- She rarely says "my mood is a 3." Read the whole passage's overall feel and map it to the scale: 1=Low, 2=Flat, 3=Okay, 4=Good, 5=Great (mood) / 1=Drained, 2=Low, 3=Steady, 4=Strong, 5=Vibrant (energy).
+- "a little stressed by work but my energy is fairly elevated, nothing too much, doing my normal chores" → mood is roughly Okay/Good (3-4) — mild stress mentioned but framed as manageable and offset by other positives, not a low mood day. energy → Strong (4), she said so directly.
+- Only leave mood/energy null if the text truly gives no read on how she's feeling at all (e.g., a single unrelated fact with no emotional tone).
+- work_stress/personal_stress DO need something concrete to size them — "a little stressed" is mild (2), not "Notable" (4); "really overwhelmed" or "constant pressure" would be 4-5. Match the intensity words she actually used, don't default to the middle-high end.
+
+WORK/PERSONAL STRESS, SLEEP — infer from clear language, but size them to match her actual intensity words (mild language → low number, strong language → high number). Leave null only if truly not mentioned.
+
+PHASE FIELD — STAY CONSERVATIVE (this one is different from mood/energy above): only set "phase" if she explicitly names it ("I'm on my period", "I think I'm ovulating") or describes a specific physiological marker (bleeding/spotting started, a clear ovulation-type pain). Generic symptoms like anxiety, irritability, fatigue, poor sleep, or headache happen in every phase and are usually just stress or life — do NOT infer a phase from these alone. When in doubt, leave phase null; the app has a separate, more reliable way to check phase timing against her actual logged history.
+
+Other rules:
 - "extra_symptoms" is for anything real she described that has no matching item in the fixed list — e.g. "sore lower back", "dizzy spells", "skin breaking out". Keep these short and in her words, not clinical relabeling.
-- PHASE FIELD — BE CONSERVATIVE: only set "phase" if she explicitly names it ("I'm on my period", "I think I'm ovulating") or describes a specific physiological marker (bleeding/spotting started, a clear ovulation-type pain). Generic symptoms like anxiety, irritability, fatigue, poor sleep, or headache happen in every phase and are usually just stress or life — do NOT infer a phase from these alone. When in doubt, leave phase null; the app has a separate, more reliable way to check phase timing against her actual logged history.
+- symptoms list: only include items from the fixed list if she actually described something matching — don't force a fit.
 - Never diagnose, never add symptoms she didn't describe, never invent a phase she didn't mention or strongly imply.
 - If the text is empty, nonsensical, or gives you nothing to work with, return all nulls and empty arrays.`;
 
